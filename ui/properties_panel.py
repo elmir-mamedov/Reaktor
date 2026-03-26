@@ -3,10 +3,12 @@ from __future__ import annotations
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QFormLayout, QLabel,
                               QDoubleSpinBox, QSpinBox, QLineEdit, QComboBox,
                               QGroupBox, QCheckBox, QPushButton,
-                              QScrollArea, QFrame, QSizePolicy)
+                              QScrollArea, QFrame, QSizePolicy,
+                              QTableWidget, QTableWidgetItem, QHBoxLayout,
+                              QHeaderView)
 from PyQt6.QtCore import Qt, pyqtSignal
 
-from models.reaction import ElementaryReaction, ReactionType
+from models.reaction import ElementaryReaction, ReactionType, CustomReaction, SpeciesEntry
 
 
 class PropertiesPanel(QWidget):
@@ -122,9 +124,9 @@ class PropertiesPanel(QWidget):
 
         layout.addWidget(kin_grp)
 
-        # — Feed conditions —
-        feed_grp = QGroupBox("Feed Conditions")
-        feed_form = QFormLayout(feed_grp)
+        # — Feed conditions (elementary reactions only) —
+        self._feed_grp = QGroupBox("Feed Conditions")
+        feed_form = QFormLayout(self._feed_grp)
         feed_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
 
         self._Ca0_spin = self._dspin(1e-6, 1000.0, 1.0, 4)
@@ -136,7 +138,44 @@ class PropertiesPanel(QWidget):
         feed_form.addRow(self._Cb0_lbl, self._Cb0_spin)
         self._Cb0_spin.valueChanged.connect(self._update)
 
-        layout.addWidget(feed_grp)
+        layout.addWidget(self._feed_grp)
+
+        # — Custom reaction species table —
+        self._custom_grp = QGroupBox("Custom Reaction")
+        cust_layout = QVBoxLayout(self._custom_grp)
+        cust_layout.setContentsMargins(6, 6, 6, 6)
+        cust_layout.setSpacing(6)
+
+        self._custom_preview = QLabel("A → B")
+        self._custom_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._custom_preview.setStyleSheet(
+            "font-size: 11px; font-weight: bold; color: #1a3a5c;"
+            "background: #eaf4fb; border-radius: 4px; padding: 4px;")
+        cust_layout.addWidget(self._custom_preview)
+
+        self._species_table = QTableWidget(0, 4)
+        self._species_table.setHorizontalHeaderLabels(["Species", "Stoich", "Role", "C₀"])
+        self._species_table.horizontalHeader().setSectionResizeMode(
+            QHeaderView.ResizeMode.Stretch)
+        self._species_table.setSelectionBehavior(
+            QTableWidget.SelectionBehavior.SelectRows)
+        self._species_table.setMinimumHeight(130)
+        self._species_table.cellChanged.connect(self._on_species_changed)
+        cust_layout.addWidget(self._species_table)
+
+        btn_row = QHBoxLayout()
+        add_btn = QPushButton("＋ Add")
+        add_btn.setFixedHeight(26)
+        add_btn.clicked.connect(self._add_species_row)
+        rem_btn = QPushButton("－ Remove")
+        rem_btn.setFixedHeight(26)
+        rem_btn.clicked.connect(self._remove_species_row)
+        btn_row.addWidget(add_btn)
+        btn_row.addWidget(rem_btn)
+        cust_layout.addLayout(btn_row)
+
+        self._custom_grp.setVisible(False)
+        layout.addWidget(self._custom_grp)
 
         # — Simulation settings —
         sim_grp = QGroupBox("Simulation Settings")
@@ -180,27 +219,46 @@ class PropertiesPanel(QWidget):
         self._placeholder.setVisible(False)
         self._form_widget.setVisible(True)
 
-        r: ElementaryReaction = item.reaction
         self._name_edit.setText(item.name)
 
-        for i in range(self._type_combo.count()):
-            if self._type_combo.itemData(i) == r.reaction_type:
-                self._type_combo.setCurrentIndex(i)
-                break
-
-        self._arrh_check.setChecked(r.use_arrhenius)
-        self._k_spin.setValue(r.k)
-        self._A_spin.setValue(r.A_factor)
-        self._Ea_spin.setValue(r.Ea)
-        self._T_spin.setValue(r.T)
-        self._Ca0_spin.setValue(r.Ca0)
-        self._Cb0_spin.setValue(r.Cb0)
-        self._tend_spin.setValue(r.t_end)
-        self._npts_spin.setValue(r.n_points)
-
-        self._set_arrhenius_visible(r.use_arrhenius)
-        self._set_cb0_visible(r.reaction_type == ReactionType.SECOND_ORDER_A_B_TO_C)
-        self._update_k_label(r.reaction_type)
+        if isinstance(item.reaction, CustomReaction):
+            r = item.reaction
+            for i in range(self._type_combo.count()):
+                if self._type_combo.itemData(i) == ReactionType.CUSTOM:
+                    self._type_combo.setCurrentIndex(i)
+                    break
+            self._arrh_check.setChecked(r.use_arrhenius)
+            self._k_spin.setValue(r.k)
+            self._A_spin.setValue(r.A_factor)
+            self._Ea_spin.setValue(r.Ea)
+            self._T_spin.setValue(r.T)
+            self._tend_spin.setValue(r.t_end)
+            self._npts_spin.setValue(r.n_points)
+            self._set_arrhenius_visible(r.use_arrhenius)
+            self._update_k_label(ReactionType.CUSTOM)
+            self._feed_grp.setVisible(False)
+            self._custom_grp.setVisible(True)
+            self._load_custom(r)
+        else:
+            r: ElementaryReaction = item.reaction
+            for i in range(self._type_combo.count()):
+                if self._type_combo.itemData(i) == r.reaction_type:
+                    self._type_combo.setCurrentIndex(i)
+                    break
+            self._arrh_check.setChecked(r.use_arrhenius)
+            self._k_spin.setValue(r.k)
+            self._A_spin.setValue(r.A_factor)
+            self._Ea_spin.setValue(r.Ea)
+            self._T_spin.setValue(r.T)
+            self._Ca0_spin.setValue(r.Ca0)
+            self._Cb0_spin.setValue(r.Cb0)
+            self._tend_spin.setValue(r.t_end)
+            self._npts_spin.setValue(r.n_points)
+            self._set_arrhenius_visible(r.use_arrhenius)
+            self._set_cb0_visible(r.reaction_type == ReactionType.SECOND_ORDER_A_B_TO_C)
+            self._update_k_label(r.reaction_type)
+            self._feed_grp.setVisible(True)
+            self._custom_grp.setVisible(False)
 
         self._loading = False
 
@@ -220,9 +278,40 @@ class PropertiesPanel(QWidget):
         if self._loading:
             return
         rt = self._type_combo.currentData()
-        self._set_cb0_visible(rt == ReactionType.SECOND_ORDER_A_B_TO_C)
-        self._update_k_label(rt)
-        self._update()
+        is_custom = (rt == ReactionType.CUSTOM)
+
+        if is_custom and not isinstance(self._item.reaction, CustomReaction):
+            old = self._item.reaction
+            new_rxn = CustomReaction(
+                k=old.k, use_arrhenius=old.use_arrhenius,
+                A_factor=old.A_factor, Ea=old.Ea, T=old.T,
+                t_end=old.t_end, n_points=old.n_points,
+            )
+            self._item.reaction = new_rxn
+            self._loading = True
+            self._load_custom(new_rxn)
+            self._loading = False
+        elif not is_custom and isinstance(self._item.reaction, CustomReaction):
+            old = self._item.reaction
+            new_rxn = ElementaryReaction(
+                reaction_type=rt,
+                k=old.k, use_arrhenius=old.use_arrhenius,
+                A_factor=old.A_factor, Ea=old.Ea, T=old.T,
+                t_end=old.t_end, n_points=old.n_points,
+            )
+            self._item.reaction = new_rxn
+
+        self._custom_grp.setVisible(is_custom)
+        self._feed_grp.setVisible(not is_custom)
+
+        if not is_custom:
+            self._set_cb0_visible(rt == ReactionType.SECOND_ORDER_A_B_TO_C)
+            self._update_k_label(rt)
+            self._update()
+        else:
+            self._update_k_label(rt)
+
+        self._item.update()
 
     def _on_arrhenius_toggled(self, checked: bool):
         self._set_arrhenius_visible(checked)
@@ -232,21 +321,112 @@ class PropertiesPanel(QWidget):
         if self._item:
             self.run_requested.emit(self._item)
 
+    def _on_species_changed(self, row: int, col: int):
+        if self._loading:
+            return
+        self._read_species_table()
+
+    def _on_role_changed(self):
+        if self._loading:
+            return
+        self._read_species_table()
+
     def _update(self):
         if self._item is None or self._loading:
             return
         r = self._item.reaction
-        r.reaction_type = self._type_combo.currentData()
-        r.k = self._k_spin.value()
-        r.use_arrhenius = self._arrh_check.isChecked()
-        r.A_factor = self._A_spin.value()
-        r.Ea = self._Ea_spin.value()
-        r.T = self._T_spin.value()
-        r.Ca0 = self._Ca0_spin.value()
-        r.Cb0 = self._Cb0_spin.value()
-        r.t_end = self._tend_spin.value()
-        r.n_points = self._npts_spin.value()
-        self._item.update()   # redraw reaction label on canvas
+        if isinstance(r, CustomReaction):
+            r.k = self._k_spin.value()
+            r.use_arrhenius = self._arrh_check.isChecked()
+            r.A_factor = self._A_spin.value()
+            r.Ea = self._Ea_spin.value()
+            r.T = self._T_spin.value()
+            r.t_end = self._tend_spin.value()
+            r.n_points = self._npts_spin.value()
+        else:
+            r.reaction_type = self._type_combo.currentData()
+            r.k = self._k_spin.value()
+            r.use_arrhenius = self._arrh_check.isChecked()
+            r.A_factor = self._A_spin.value()
+            r.Ea = self._Ea_spin.value()
+            r.T = self._T_spin.value()
+            r.Ca0 = self._Ca0_spin.value()
+            r.Cb0 = self._Cb0_spin.value()
+            r.t_end = self._tend_spin.value()
+            r.n_points = self._npts_spin.value()
+        self._item.update()
+
+    # ── species table helpers ─────────────────────────────────────────────
+
+    def _load_custom(self, rxn: CustomReaction):
+        self._species_table.blockSignals(True)
+        self._species_table.setRowCount(0)
+        for s in rxn.species:
+            self._append_species_row(s.name, s.stoich, s.is_reactant, s.C0)
+        self._species_table.blockSignals(False)
+        self._update_custom_preview()
+
+    def _append_species_row(self, name: str = "X", stoich: float = 1.0,
+                             is_reactant: bool = True, C0: float = 0.0):
+        row = self._species_table.rowCount()
+        self._species_table.insertRow(row)
+        self._species_table.setItem(row, 0, QTableWidgetItem(name))
+        self._species_table.setItem(row, 1, QTableWidgetItem(str(stoich)))
+
+        role_combo = QComboBox()
+        role_combo.addItem("Reactant")
+        role_combo.addItem("Product")
+        role_combo.setCurrentIndex(0 if is_reactant else 1)
+        role_combo.currentIndexChanged.connect(self._on_role_changed)
+        self._species_table.setCellWidget(row, 2, role_combo)
+
+        self._species_table.setItem(row, 3, QTableWidgetItem(str(C0)))
+
+    def _add_species_row(self):
+        self._species_table.blockSignals(True)
+        self._append_species_row()
+        self._species_table.blockSignals(False)
+        self._read_species_table()
+
+    def _remove_species_row(self):
+        rows = self._species_table.selectionModel().selectedRows()
+        if rows:
+            for idx in sorted(rows, reverse=True):
+                self._species_table.removeRow(idx.row())
+        elif self._species_table.rowCount() > 0:
+            self._species_table.removeRow(self._species_table.rowCount() - 1)
+        self._read_species_table()
+
+    def _read_species_table(self):
+        if self._item is None or not isinstance(self._item.reaction, CustomReaction):
+            return
+        species = []
+        for row in range(self._species_table.rowCount()):
+            name_item = self._species_table.item(row, 0)
+            stoich_item = self._species_table.item(row, 1)
+            role_widget = self._species_table.cellWidget(row, 2)
+            c0_item = self._species_table.item(row, 3)
+            if name_item is None or stoich_item is None:
+                continue
+            name = name_item.text().strip()
+            try:
+                stoich = float(stoich_item.text())
+            except ValueError:
+                stoich = 1.0
+            is_reactant = (role_widget.currentIndex() == 0) if role_widget else True
+            try:
+                c0 = float(c0_item.text()) if c0_item else 0.0
+            except ValueError:
+                c0 = 0.0
+            species.append(SpeciesEntry(name=name, stoich=stoich,
+                                        is_reactant=is_reactant, C0=c0))
+        self._item.reaction.species = species
+        self._update_custom_preview()
+        self._item.update()
+
+    def _update_custom_preview(self):
+        if self._item and isinstance(self._item.reaction, CustomReaction):
+            self._custom_preview.setText(self._item.reaction.reaction_label())
 
     # ── helpers ───────────────────────────────────────────────────────────
 
@@ -273,6 +453,10 @@ class PropertiesPanel(QWidget):
         self._Cb0_spin.setVisible(show)
 
     def _update_k_label(self, rt: ReactionType):
+        if rt == ReactionType.CUSTOM:
+            self._k_lbl.setText("k (mixed units):")
+            self._A_lbl.setText("A (mixed units):")
+            return
         is_second = rt in (ReactionType.SECOND_ORDER_A_B_TO_C,
                            ReactionType.SECOND_ORDER_2A_TO_B)
         unit = "L/(mol·s)" if is_second else "1/s"

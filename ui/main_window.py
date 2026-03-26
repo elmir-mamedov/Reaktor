@@ -162,6 +162,13 @@ class MainWindow(QMainWindow):
         self._run_reactor(items[0])
 
     def _run_reactor(self, item: BatchReactorItem):
+        from models.reaction import CustomReaction, validate
+        if isinstance(item.reaction, CustomReaction):
+            err = validate(item.reaction)
+            if err:
+                QMessageBox.warning(self, "Invalid Reaction", err)
+                return
+
         self._statusbar.showMessage(f"Running {item.name}…")
         try:
             results = simulate(item.reaction)
@@ -171,12 +178,18 @@ class MainWindow(QMainWindow):
 
             self._results.display(results, item.name)
 
+            if isinstance(item.reaction, CustomReaction):
+                reactants = [s for s in item.reaction.species if s.is_reactant]
+                ref = reactants[0].name if reactants else "A"
+            else:
+                ref = "A"
+
             X_final = float(results["conversion"][-1]) * 100
-            msg = (f"{item.name}  |  Final conversion XA = {X_final:.2f}%  "
+            msg = (f"{item.name}  |  Final conversion X{ref} = {X_final:.2f}%  "
                    f"|  Solver: {results['message']}")
             self._statusbar.showMessage(msg)
             self._tb_info.setText(
-                f"  {item.name}  •  XA = {X_final:.2f}%")
+                f"  {item.name}  •  X{ref} = {X_final:.2f}%")
 
         except Exception as exc:
             QMessageBox.critical(self, "Simulation Error",

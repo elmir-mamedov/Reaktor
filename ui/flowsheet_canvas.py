@@ -7,7 +7,7 @@ from PyQt6.QtCore import Qt, QRectF, QPointF, pyqtSignal
 from PyQt6.QtGui import (QPainter, QPen, QBrush, QColor, QFont,
                           QTransform, QAction)
 
-from models.reaction import ElementaryReaction, ReactionType
+from models.reaction import ElementaryReaction, ReactionType, CustomReaction
 
 # ── Vessel geometry constants ─────────────────────────────────────────────────
 _W = 64       # vessel body width
@@ -124,14 +124,19 @@ class BatchReactorItem(QGraphicsItem):
             Qt.AlignmentFlag.AlignCenter, self.name)
 
         # Reaction type hint (inside vessel body)
-        _rtype_short = {
-            "FIRST_ORDER_A_TO_B": "A→B",
-            "SECOND_ORDER_A_B_TO_C": "A+B→C",
-            "SECOND_ORDER_2A_TO_B": "2A→B",
-        }
         painter.setFont(QFont("Segoe UI", 7))
         painter.setPen(QPen(QColor("#5d6d7e")))
-        rstr = _rtype_short.get(self.reaction.reaction_type.name, "")
+        if isinstance(self.reaction, CustomReaction):
+            rstr = self.reaction.reaction_label()
+            if len(rstr) > 12:
+                rstr = rstr[:11] + "…"
+        else:
+            _rtype_short = {
+                "FIRST_ORDER_A_TO_B": "A→B",
+                "SECOND_ORDER_A_B_TO_C": "A+B→C",
+                "SECOND_ORDER_2A_TO_B": "2A→B",
+            }
+            rstr = _rtype_short.get(self.reaction.reaction_type.name, "")
         painter.drawText(
             QRectF(-w / 2, -h / 2 + eh + 3, w, 14),
             Qt.AlignmentFlag.AlignCenter, rstr)
