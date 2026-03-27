@@ -145,7 +145,8 @@ class PropertiesPanel(QWidget):
             QHeaderView.ResizeMode.Stretch)
         self._species_table.setSelectionBehavior(
             QTableWidget.SelectionBehavior.SelectRows)
-        self._species_table.setMinimumHeight(130)
+        self._species_table.setMinimumHeight(80)
+        self._species_table.setMaximumHeight(200)
         self._species_table.cellChanged.connect(self._on_species_changed)
         cust_layout.addWidget(self._species_table)
 
