@@ -139,6 +139,15 @@ class PropertiesPanel(QWidget):
             "background: #eaf4fb; border-radius: 4px; padding: 4px;")
         cust_layout.addWidget(self._reaction_preview)
 
+        self._add_btn = QPushButton("＋ Add Species")
+        self._add_btn.setFixedHeight(30)
+        self._add_btn.clicked.connect(self._add_species_row)
+        self._rem_btn = QPushButton("－ Remove Species")
+        self._rem_btn.setFixedHeight(30)
+        self._rem_btn.clicked.connect(self._remove_species_row)
+        cust_layout.addWidget(self._add_btn)
+        cust_layout.addWidget(self._rem_btn)
+
         self._species_table = QTableWidget(0, 4)
         self._species_table.setHorizontalHeaderLabels(["Species", "Stoich", "Role", "C₀"])
         self._species_table.horizontalHeader().setSectionResizeMode(
@@ -149,17 +158,6 @@ class PropertiesPanel(QWidget):
         self._species_table.setMaximumHeight(200)
         self._species_table.cellChanged.connect(self._on_species_changed)
         cust_layout.addWidget(self._species_table)
-
-        btn_row = QHBoxLayout()
-        add_btn = QPushButton("＋ Add")
-        add_btn.setFixedHeight(26)
-        add_btn.clicked.connect(self._add_species_row)
-        rem_btn = QPushButton("－ Remove")
-        rem_btn.setFixedHeight(26)
-        rem_btn.clicked.connect(self._remove_species_row)
-        btn_row.addWidget(add_btn)
-        btn_row.addWidget(rem_btn)
-        cust_layout.addLayout(btn_row)
 
         layout.addWidget(self._species_grp)
 
