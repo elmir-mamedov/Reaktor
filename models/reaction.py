@@ -82,10 +82,7 @@ TEMPLATES = {
         SpeciesEntry("A", 2.0, True,  1.0),
         SpeciesEntry("B", 1.0, False, 0.0),
     ],
-    "Custom": [
-        SpeciesEntry("A", 1.0, True,  1.0),
-        SpeciesEntry("B", 1.0, False, 0.0),
-    ],
+    "Custom (build your own)": [],
 }
 
 
