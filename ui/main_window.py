@@ -162,12 +162,11 @@ class MainWindow(QMainWindow):
         self._run_reactor(items[0])
 
     def _run_reactor(self, item: BatchReactorItem):
-        from models.reaction import CustomReaction, validate
-        if isinstance(item.reaction, CustomReaction):
-            err = validate(item.reaction)
-            if err:
-                QMessageBox.warning(self, "Invalid Reaction", err)
-                return
+        from models.reaction import validate
+        err = validate(item.reaction)
+        if err:
+            QMessageBox.warning(self, "Invalid Reaction", err)
+            return
 
         self._statusbar.showMessage(f"Running {item.name}…")
         try:
@@ -178,11 +177,8 @@ class MainWindow(QMainWindow):
 
             self._results.display(results, item.name)
 
-            if isinstance(item.reaction, CustomReaction):
-                reactants = [s for s in item.reaction.species if s.is_reactant]
-                ref = reactants[0].name if reactants else "A"
-            else:
-                ref = "A"
+            reactants = [s for s in item.reaction.species if s.is_reactant]
+            ref = reactants[0].name if reactants else "A"
 
             X_final = float(results["conversion"][-1]) * 100
             msg = (f"{item.name}  |  Final conversion X{ref} = {X_final:.2f}%  "
@@ -224,6 +220,6 @@ class MainWindow(QMainWindow):
             self, "About Reaktor",
             "<h3>Reaktor v1.0</h3>"
             "<p>A batch reactor process simulator inspired by Aspen PLUS.</p>"
-            "<p>Supports three elementary reaction types with optional "
+            "<p>Define any reaction with custom stoichiometry and optional "
             "Arrhenius kinetics. ODEs are solved with SciPy's RK45.</p>"
             "<p><b>Built with:</b> Python · PyQt6 · NumPy · SciPy · Matplotlib</p>")

@@ -1,12 +1,5 @@
 from dataclasses import dataclass, field
-from enum import Enum
 
-
-class ReactionType(Enum):
-    FIRST_ORDER_A_TO_B = "A → B  (1st order,  −rA = k·CA)"
-    SECOND_ORDER_A_B_TO_C = "A + B → C  (2nd order,  −rA = k·CA·CB)"
-    SECOND_ORDER_2A_TO_B = "2A → B  (2nd order,  −rA = k·CA²)"
-    CUSTOM = "Custom stoichiometry"
 
 @dataclass
 class SpeciesEntry:
@@ -15,16 +8,10 @@ class SpeciesEntry:
     is_reactant: bool  # determines sign in ODE
     C0: float          # initial concentration
 
-def _default_species():
-    return [
-        SpeciesEntry(name="A", stoich=1.0, is_reactant=True, C0=1.0),
-        SpeciesEntry(name="B", stoich=1.0, is_reactant=False, C0=0.0),
-    ]
-
 
 @dataclass
 class CustomReaction:
-    species: list = field(default_factory=_default_species)
+    species: list = field(default_factory=list)
     k: float = 0.05
     use_arrhenius: bool = False
     A_factor: float = 1.0e8
@@ -79,32 +66,32 @@ def validate(rxn: CustomReaction) -> "str | None":
     return None
 
 
-@dataclass
-class ElementaryReaction:
-    reaction_type: ReactionType = ReactionType.FIRST_ORDER_A_TO_B
+# ── Templates ──────────────────────────────────────────────────────────────
 
-    # Direct rate constant (used when use_arrhenius is False)
-    k: float = 0.05             # 1/s for 1st order; L/(mol·s) for 2nd order
+TEMPLATES = {
+    "A → B  (1st order)": [
+        SpeciesEntry("A", 1.0, True,  1.0),
+        SpeciesEntry("B", 1.0, False, 0.0),
+    ],
+    "A + B → C  (2nd order)": [
+        SpeciesEntry("A", 1.0, True,  1.0),
+        SpeciesEntry("B", 1.0, True,  1.0),
+        SpeciesEntry("C", 1.0, False, 0.0),
+    ],
+    "2A → B  (2nd order)": [
+        SpeciesEntry("A", 2.0, True,  1.0),
+        SpeciesEntry("B", 1.0, False, 0.0),
+    ],
+    "Custom": [
+        SpeciesEntry("A", 1.0, True,  1.0),
+        SpeciesEntry("B", 1.0, False, 0.0),
+    ],
+}
 
-    # Arrhenius parameters
-    use_arrhenius: bool = False
-    A_factor: float = 1.0e8     # pre-exponential factor (same units as k)
-    Ea: float = 50_000.0        # activation energy, J/mol
-    T: float = 298.15           # temperature, K
 
-    # Feed conditions
-    Ca0: float = 1.0            # initial conc. of A, mol/L
-    Cb0: float = 1.0            # initial conc. of B (for A+B→C), mol/L
-
-    # Simulation horizon
-    t_end: float = 100.0        # s
-    n_points: int = 500
-
-    R: float = field(default=8.314, init=False, repr=False)
-
-    def effective_k(self) -> float:
-        """Return the rate constant, applying Arrhenius if requested."""
-        if self.use_arrhenius:
-            import math
-            return self.A_factor * math.exp(-self.Ea / (self.R * self.T))
-        return self.k
+def default_reaction() -> CustomReaction:
+    """Return a ready-to-use A → B reaction."""
+    return CustomReaction(species=[
+        SpeciesEntry("A", 1.0, True,  1.0),
+        SpeciesEntry("B", 1.0, False, 0.0),
+    ])

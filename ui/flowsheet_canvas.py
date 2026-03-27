@@ -7,7 +7,7 @@ from PyQt6.QtCore import Qt, QRectF, QPointF, pyqtSignal
 from PyQt6.QtGui import (QPainter, QPen, QBrush, QColor, QFont,
                           QTransform, QAction)
 
-from models.reaction import ElementaryReaction, ReactionType, CustomReaction
+from models.reaction import CustomReaction, default_reaction
 
 # ── Vessel geometry constants ─────────────────────────────────────────────────
 _W = 64       # vessel body width
@@ -23,7 +23,7 @@ class BatchReactorItem(QGraphicsItem):
     def __init__(self, name: str = "R-100", scene: FlowsheetScene = None):
         super().__init__()
         self.name = name
-        self.reaction = ElementaryReaction()
+        self.reaction = default_reaction()
         self._scene_ref = scene  # kept to call scene methods (no QObject signal)
         self._hovered = False
 
@@ -123,20 +123,12 @@ class BatchReactorItem(QGraphicsItem):
             QRectF(-w / 2, h / 2 + 6, w, 18),
             Qt.AlignmentFlag.AlignCenter, self.name)
 
-        # Reaction type hint (inside vessel body)
+        # Reaction label hint (inside vessel body)
         painter.setFont(QFont("Segoe UI", 7))
         painter.setPen(QPen(QColor("#5d6d7e")))
-        if isinstance(self.reaction, CustomReaction):
-            rstr = self.reaction.reaction_label()
-            if len(rstr) > 12:
-                rstr = rstr[:11] + "…"
-        else:
-            _rtype_short = {
-                "FIRST_ORDER_A_TO_B": "A→B",
-                "SECOND_ORDER_A_B_TO_C": "A+B→C",
-                "SECOND_ORDER_2A_TO_B": "2A→B",
-            }
-            rstr = _rtype_short.get(self.reaction.reaction_type.name, "")
+        rstr = self.reaction.reaction_label()
+        if len(rstr) > 12:
+            rstr = rstr[:11] + "…"
         painter.drawText(
             QRectF(-w / 2, -h / 2 + eh + 3, w, 14),
             Qt.AlignmentFlag.AlignCenter, rstr)
