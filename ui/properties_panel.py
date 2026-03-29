@@ -296,7 +296,7 @@ class PropertiesPanel(QWidget):
 
     def _switch_to_custom(self):
         self._loading = True
-        self._template_combo.setCurrentText("Custom (build your own)")
+        self._template_combo.setCurrentText("Custom")
         self._loading = False
 
     def _next_species_name(self) -> str:
