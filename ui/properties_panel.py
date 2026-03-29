@@ -313,7 +313,7 @@ class PropertiesPanel(QWidget):
     def _add_species_row(self):
         self._switch_to_custom()
         self._species_table.blockSignals(True)
-        self._append_species_row(name=self._next_species_name())
+        self._append_species_row(name=self._next_species_name(), is_reactant=False)
         self._species_table.blockSignals(False)
         self._read_species_table()
 
