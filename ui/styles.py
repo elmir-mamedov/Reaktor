@@ -115,9 +115,18 @@ QLabel {
 
 /* ── Buttons ── */
 QPushButton {
+    background-color: #dfe6e9;
+    color: #2c3e50;
+    border: 1px solid #aab7b8;
     border-radius: 4px;
     padding: 6px 16px;
     font-size: 12px;
+}
+QPushButton:hover {
+    background-color: #ccd6dd;
+}
+QPushButton:pressed {
+    background-color: #b2bec3;
 }
 QPushButton#run_btn {
     background-color: #27ae60;
