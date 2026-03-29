@@ -299,10 +299,21 @@ class PropertiesPanel(QWidget):
         self._template_combo.setCurrentText("Custom (build your own)")
         self._loading = False
 
+    def _next_species_name(self) -> str:
+        existing = {
+            self._species_table.item(r, 0).text()
+            for r in range(self._species_table.rowCount())
+            if self._species_table.item(r, 0)
+        }
+        for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
+            if letter not in existing:
+                return letter
+        return "X"
+
     def _add_species_row(self):
         self._switch_to_custom()
         self._species_table.blockSignals(True)
-        self._append_species_row()
+        self._append_species_row(name=self._next_species_name())
         self._species_table.blockSignals(False)
         self._read_species_table()
 
