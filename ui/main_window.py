@@ -13,7 +13,7 @@ from models.batch_reactor import simulate
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Reaktor — Batch Reactor Simulator")
+        self.setWindowTitle("Reaktor — Unit Processing Simulator")
         self.resize(1400, 900)
         self.setMinimumSize(1000, 680)
 
