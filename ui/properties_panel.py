@@ -294,13 +294,20 @@ class PropertiesPanel(QWidget):
 
         self._species_table.setItem(row, 3, QTableWidgetItem(str(C0)))
 
+    def _switch_to_custom(self):
+        self._loading = True
+        self._template_combo.setCurrentText("Custom (build your own)")
+        self._loading = False
+
     def _add_species_row(self):
+        self._switch_to_custom()
         self._species_table.blockSignals(True)
         self._append_species_row()
         self._species_table.blockSignals(False)
         self._read_species_table()
 
     def _remove_species_row(self):
+        self._switch_to_custom()
         rows = self._species_table.selectionModel().selectedRows()
         if rows:
             for idx in sorted(rows, reverse=True):
