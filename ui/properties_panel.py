@@ -139,10 +139,10 @@ class PropertiesPanel(QWidget):
             "background: #eaf4fb; border-radius: 4px; padding: 4px;")
         cust_layout.addWidget(self._reaction_preview)
 
-        self._add_btn = QPushButton("＋ Add Species")
+        self._add_btn = QPushButton("+ Add Species")
         self._add_btn.setFixedHeight(30)
         self._add_btn.clicked.connect(self._add_species_row)
-        self._rem_btn = QPushButton("－ Remove Species")
+        self._rem_btn = QPushButton("- Remove Species")
         self._rem_btn.setFixedHeight(30)
         self._rem_btn.clicked.connect(self._remove_species_row)
         cust_layout.addWidget(self._add_btn)

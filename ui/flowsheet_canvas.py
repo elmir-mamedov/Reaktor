@@ -118,13 +118,13 @@ class BatchReactorItem(QGraphicsItem):
 
         # Reactor name label (below vessel)
         painter.setPen(QPen(QColor("#1a3a5c")))
-        painter.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
+        painter.setFont(QFont("", 9, QFont.Weight.Bold))
         painter.drawText(
             QRectF(-w / 2, h / 2 + 6, w, 18),
             Qt.AlignmentFlag.AlignCenter, self.name)
 
         # Reaction label hint (inside vessel body)
-        painter.setFont(QFont("Segoe UI", 7))
+        painter.setFont(QFont("", 7))
         painter.setPen(QPen(QColor("#5d6d7e")))
         rstr = self.reaction.reaction_label()
         if len(rstr) > 12:

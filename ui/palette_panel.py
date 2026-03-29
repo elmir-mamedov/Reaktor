@@ -33,7 +33,7 @@ class EquipmentTile(QWidget):
         self._draw_reactor_icon(painter, self.width() // 2, 40, 28, 40)
 
         painter.setPen(QPen(QColor("#1a3a5c")))
-        painter.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
+        painter.setFont(QFont("", 9, QFont.Weight.Bold))
         painter.drawText(0, self.height() - 18, self.width(), 18,
                          Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter,
                          self._label)
