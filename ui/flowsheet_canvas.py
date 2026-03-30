@@ -7,12 +7,18 @@ from PyQt6.QtCore import Qt, QRectF, QPointF, pyqtSignal
 from PyQt6.QtGui import (QPainter, QPen, QBrush, QColor, QFont,
                           QTransform, QAction)
 
-from models.reaction import CustomReaction, default_reaction
+from PyQt6.QtGui import QPolygonF
+from models.reaction import CustomReaction, default_reaction, default_cstr_reaction
 
-# ── Vessel geometry constants ─────────────────────────────────────────────────
+# ── Batch reactor geometry ────────────────────────────────────────────────────
 _W = 64       # vessel body width
 _H = 90       # vessel body height
 _EH = 20      # ellipse height at top and bottom
+
+# ── CSTR geometry ─────────────────────────────────────────────────────────────
+_CW = 72      # CSTR vessel width
+_CH = 78      # CSTR vessel height
+_CEH = 18     # CSTR ellipse height
 
 
 class BatchReactorItem(QGraphicsItem):
@@ -134,6 +140,137 @@ class BatchReactorItem(QGraphicsItem):
             Qt.AlignmentFlag.AlignCenter, rstr)
 
 
+def _draw_arrowhead(painter: QPainter, tip_x: float, tip_y: float,
+                    size: float, color: QColor):
+    """Draw a rightward arrowhead with its tip at (tip_x, tip_y)."""
+    poly = QPolygonF([
+        QPointF(tip_x, tip_y),
+        QPointF(tip_x - size, tip_y - size * 0.5),
+        QPointF(tip_x - size, tip_y + size * 0.5),
+    ])
+    painter.setPen(QPen(color, 0))
+    painter.setBrush(QBrush(color))
+    painter.drawPolygon(poly)
+
+
+class CSTRReactorItem(QGraphicsItem):
+    """PFD symbol for a CSTR (Continuous Stirred Tank Reactor)."""
+
+    MIME_KEY = "cstr_reactor"
+
+    def __init__(self, name: str = "R-100", scene=None):
+        super().__init__()
+        self.name = name
+        self.reaction = default_cstr_reaction()
+        self._scene_ref = scene
+        self._hovered = False
+
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges, True)
+        self.setAcceptHoverEvents(True)
+
+    def boundingRect(self) -> QRectF:
+        return QRectF(-_CW / 2 - 30, -_CH / 2 - 10, _CW + 60, _CH + 42)
+
+    def hoverEnterEvent(self, event):
+        self._hovered = True
+        self.update()
+
+    def hoverLeaveEvent(self, event):
+        self._hovered = False
+        self.update()
+
+    def itemChange(self, change, value):
+        if change == QGraphicsItem.GraphicsItemChange.ItemSelectedHasChanged:
+            if self._scene_ref is not None:
+                if value:
+                    self._scene_ref._notify_selected(self)
+                else:
+                    if not self._scene_ref.selectedItems():
+                        self._scene_ref._notify_deselected()
+        return super().itemChange(change, value)
+
+    def paint(self, painter: QPainter, option, widget):
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        selected = self.isSelected()
+        hovered = self._hovered
+
+        if selected:
+            body_fill = QColor("#a9dfbf")
+            border = QColor("#145a32")
+            bw = 2.5
+        elif hovered:
+            body_fill = QColor("#abebc6")
+            border = QColor("#1e8449")
+            bw = 2.0
+        else:
+            body_fill = QColor("#d5f5e3")
+            border = QColor("#27ae60")
+            bw = 1.5
+
+        pen = QPen(border, bw)
+        brush = QBrush(body_fill)
+        painter.setPen(pen)
+        painter.setBrush(brush)
+
+        w, h, eh = _CW, _CH, _CEH
+
+        # Vessel body
+        painter.drawRect(QRectF(-w / 2, -h / 2 + eh / 2, w, h - eh))
+        painter.drawEllipse(QRectF(-w / 2, -h / 2, w, eh))
+        painter.drawEllipse(QRectF(-w / 2, h / 2 - eh, w, eh))
+
+        # Inlet pipe (upper left)
+        inlet_y = -h / 4
+        painter.setPen(QPen(border, bw))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawLine(QPointF(-w / 2 - 22, inlet_y), QPointF(-w / 2, inlet_y))
+        _draw_arrowhead(painter, -w / 2 + 1, inlet_y, 6, border)
+
+        # Outlet pipe (lower right)
+        outlet_y = h / 4
+        painter.setPen(QPen(border, bw))
+        painter.drawLine(QPointF(w / 2, outlet_y), QPointF(w / 2 + 22, outlet_y))
+        _draw_arrowhead(painter, w / 2 + 22, outlet_y, 6, border)
+
+        # Agitator shaft
+        painter.setPen(QPen(border, 1.2))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        shaft_top = -h / 2 + eh / 2
+        shaft_bot = h / 2 - eh / 2
+        painter.drawLine(QPointF(0, shaft_top), QPointF(0, shaft_bot))
+
+        blen = w * 0.36
+        for blade_y in (-h * 0.15, h * 0.15):
+            painter.drawLine(QPointF(-blen, blade_y), QPointF(blen, blade_y))
+
+        # Selection highlight
+        if selected:
+            sel_pen = QPen(QColor("#2ecc71"), 1.2, Qt.PenStyle.DashLine)
+            painter.setPen(sel_pen)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawRect(self.boundingRect().adjusted(3, 3, -3, -3))
+
+        # Name label
+        painter.setPen(QPen(QColor("#145a32")))
+        painter.setFont(QFont("", 9, QFont.Weight.Bold))
+        painter.drawText(
+            QRectF(-w / 2, h / 2 + 6, w, 18),
+            Qt.AlignmentFlag.AlignCenter, self.name)
+
+        # Reaction label inside vessel
+        painter.setFont(QFont("", 7))
+        painter.setPen(QPen(QColor("#5d6d7e")))
+        rstr = self.reaction.reaction_label()
+        if len(rstr) > 12:
+            rstr = rstr[:11] + "…"
+        painter.drawText(
+            QRectF(-w / 2, -h / 2 + eh + 3, w, 14),
+            Qt.AlignmentFlag.AlignCenter, rstr)
+
+
 # ── Scene ─────────────────────────────────────────────────────────────────────
 
 class FlowsheetScene(QGraphicsScene):
@@ -155,6 +292,14 @@ class FlowsheetScene(QGraphicsScene):
         self.addItem(item)
         return item
 
+    def add_cstr(self, pos: QPointF) -> CSTRReactorItem:
+        self._counter += 1
+        name = f"R-{100 + self._counter - 1}"
+        item = CSTRReactorItem(name, scene=self)
+        item.setPos(pos)
+        self.addItem(item)
+        return item
+
     # ── called by BatchReactorItem.itemChange ─────────────────────────────
 
     def _notify_selected(self, item: BatchReactorItem):
@@ -170,14 +315,20 @@ class FlowsheetScene(QGraphicsScene):
         menu = QMenu()
 
         if item is None:
-            add_act = QAction("Add Batch Reactor Here")
-            menu.addAction(add_act)
+            add_batch_act = QAction("Add Batch Reactor Here")
+            add_cstr_act = QAction("Add CSTR Here")
+            menu.addAction(add_batch_act)
+            menu.addAction(add_cstr_act)
             chosen = menu.exec(event.screenPos())
-            if chosen == add_act:
+            if chosen == add_batch_act:
                 reactor = self.add_reactor(event.scenePos())
                 self.clearSelection()
                 reactor.setSelected(True)
-        elif isinstance(item, BatchReactorItem):
+            elif chosen == add_cstr_act:
+                reactor = self.add_cstr(event.scenePos())
+                self.clearSelection()
+                reactor.setSelected(True)
+        elif isinstance(item, (BatchReactorItem, CSTRReactorItem)):
             del_act = QAction(f"Delete  {item.name}")
             menu.addAction(del_act)
             chosen = menu.exec(event.screenPos())
@@ -288,12 +439,17 @@ class FlowsheetView(QGraphicsView):
             event.acceptProposedAction()
 
     def dropEvent(self, event):
-        if (event.mimeData().hasText()
-                and event.mimeData().text() == BatchReactorItem.MIME_KEY):
+        if event.mimeData().hasText():
+            mime = event.mimeData().text()
             sc = self.scene()
             if isinstance(sc, FlowsheetScene):
                 pos = self.mapToScene(event.position().toPoint())
-                reactor = sc.add_reactor(pos)
+                if mime == BatchReactorItem.MIME_KEY:
+                    reactor = sc.add_reactor(pos)
+                elif mime == CSTRReactorItem.MIME_KEY:
+                    reactor = sc.add_cstr(pos)
+                else:
+                    return
                 sc.clearSelection()
                 reactor.setSelected(True)
             event.acceptProposedAction()

@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QFormLayout, QLabel,
                               QHeaderView)
 from PyQt6.QtCore import Qt, pyqtSignal
 
-from models.reaction import CustomReaction, SpeciesEntry, TEMPLATES
+from models.reaction import CustomReaction, SpeciesEntry, TEMPLATES, CSTR_TEMPLATES
 
 
 class PropertiesPanel(QWidget):
@@ -52,7 +52,7 @@ class PropertiesPanel(QWidget):
 
         # Placeholder (shown when nothing is selected)
         self._placeholder = QLabel(
-            "Select a unit operation\non the flowsheet to\nview its properties.")
+            "Select a reactor\non the flowsheet to\nview its properties.")
         self._placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._placeholder.setStyleSheet(
             "color: #95a5a6; font-size: 12px; margin: 30px 0;")
@@ -79,6 +79,10 @@ class PropertiesPanel(QWidget):
         self._name_edit = QLineEdit()
         self._name_edit.textChanged.connect(self._on_name_changed)
         gen_form.addRow("Name:", self._name_edit)
+        self._reactor_type_lbl = QLabel("Batch Reactor")
+        self._reactor_type_lbl.setStyleSheet(
+            "color: #5d6d7e; font-size: 10px; font-style: italic;")
+        gen_form.addRow("Type:", self._reactor_type_lbl)
         layout.addWidget(gen_grp)
 
         # — Reaction template —
@@ -148,8 +152,10 @@ class PropertiesPanel(QWidget):
         cust_layout.addWidget(self._add_btn)
         cust_layout.addWidget(self._rem_btn)
 
-        self._species_table = QTableWidget(0, 4)
-        self._species_table.setHorizontalHeaderLabels(["Species", "Stoich", "Role", "C₀"])
+        self._species_table = QTableWidget(0, 5)
+        self._species_table.setHorizontalHeaderLabels(
+            ["Species", "Stoich", "Role", "C₀", "C_feed"])
+        self._species_table.setColumnHidden(4, True)  # shown only for CSTR
         self._species_table.horizontalHeader().setSectionResizeMode(
             QHeaderView.ResizeMode.Stretch)
         self._species_table.setSelectionBehavior(
@@ -160,6 +166,17 @@ class PropertiesPanel(QWidget):
         cust_layout.addWidget(self._species_table)
 
         layout.addWidget(self._species_grp)
+
+        # — CSTR Settings (hidden for batch) —
+        self._cstr_grp = QGroupBox("CSTR Settings")
+        cstr_form = QFormLayout(self._cstr_grp)
+        cstr_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+        self._tau_spin = self._dspin(0.1, 1e6, 60.0, 1)
+        self._tau_spin.setStepType(QDoubleSpinBox.StepType.AdaptiveDecimalStepType)
+        cstr_form.addRow("Residence time τ (s):", self._tau_spin)
+        self._tau_spin.valueChanged.connect(self._update)
+        self._cstr_grp.setVisible(False)
+        layout.addWidget(self._cstr_grp)
 
         # — Simulation settings —
         sim_grp = QGroupBox("Simulation Settings")
@@ -194,15 +211,18 @@ class PropertiesPanel(QWidget):
     # ── public slots ──────────────────────────────────────────────────────
 
     def load_reactor(self, item):
-        """Populate the panel from a BatchReactorItem."""
+        """Populate the panel from a BatchReactorItem or CSTRReactorItem."""
         self._loading = True
         self._item = item
         r: CustomReaction = item.reaction
+        is_cstr = r.reactor_type == "cstr"
 
         self._placeholder.setVisible(False)
         self._form_widget.setVisible(True)
 
         self._name_edit.setText(item.name)
+        self._reactor_type_lbl.setText("CSTR" if is_cstr else "Batch Reactor")
+
         self._arrh_check.setChecked(r.use_arrhenius)
         self._k_spin.setValue(r.k)
         self._A_spin.setValue(r.A_factor)
@@ -211,6 +231,13 @@ class PropertiesPanel(QWidget):
         self._tend_spin.setValue(r.t_end)
         self._npts_spin.setValue(r.n_points)
         self._set_arrhenius_visible(r.use_arrhenius)
+
+        # CSTR-specific fields
+        self._cstr_grp.setVisible(is_cstr)
+        self._species_table.setColumnHidden(4, not is_cstr)
+        if is_cstr:
+            self._tau_spin.setValue(r.tau)
+
         self._load_species(r)
 
         self._loading = False
@@ -230,7 +257,9 @@ class PropertiesPanel(QWidget):
     def _on_template_changed(self, name: str):
         if self._loading or self._item is None:
             return
-        species = [copy.copy(s) for s in TEMPLATES[name]]
+        is_cstr = self._item.reaction.reactor_type == "cstr"
+        tmpl = CSTR_TEMPLATES if is_cstr else TEMPLATES
+        species = [copy.copy(s) for s in tmpl.get(name, [])]
         self._item.reaction.species = species
         self._loading = True
         self._load_species(self._item.reaction)
@@ -266,6 +295,8 @@ class PropertiesPanel(QWidget):
         r.T = self._T_spin.value()
         r.t_end = self._tend_spin.value()
         r.n_points = self._npts_spin.value()
+        if r.reactor_type == "cstr":
+            r.tau = self._tau_spin.value()
         self._item.update()
 
     # ── species table helpers ─────────────────────────────────────────────
@@ -274,12 +305,13 @@ class PropertiesPanel(QWidget):
         self._species_table.blockSignals(True)
         self._species_table.setRowCount(0)
         for s in rxn.species:
-            self._append_species_row(s.name, s.stoich, s.is_reactant, s.C0)
+            self._append_species_row(s.name, s.stoich, s.is_reactant, s.C0, s.C_feed)
         self._species_table.blockSignals(False)
         self._update_reaction_preview()
 
     def _append_species_row(self, name: str = "X", stoich: float = 1.0,
-                             is_reactant: bool = True, C0: float = 0.0):
+                             is_reactant: bool = True, C0: float = 0.0,
+                             C_feed: float = 0.0):
         row = self._species_table.rowCount()
         self._species_table.insertRow(row)
         self._species_table.setItem(row, 0, QTableWidgetItem(name))
@@ -293,6 +325,7 @@ class PropertiesPanel(QWidget):
         self._species_table.setCellWidget(row, 2, role_combo)
 
         self._species_table.setItem(row, 3, QTableWidgetItem(str(C0)))
+        self._species_table.setItem(row, 4, QTableWidgetItem(str(C_feed)))
 
     def _switch_to_custom(self):
         self._loading = True
@@ -336,6 +369,7 @@ class PropertiesPanel(QWidget):
             stoich_item = self._species_table.item(row, 1)
             role_widget = self._species_table.cellWidget(row, 2)
             c0_item = self._species_table.item(row, 3)
+            c_feed_item = self._species_table.item(row, 4)
             if name_item is None or stoich_item is None:
                 continue
             name = name_item.text().strip()
@@ -348,8 +382,13 @@ class PropertiesPanel(QWidget):
                 c0 = float(c0_item.text()) if c0_item else 0.0
             except ValueError:
                 c0 = 0.0
+            try:
+                c_feed = float(c_feed_item.text()) if c_feed_item else 0.0
+            except ValueError:
+                c_feed = 0.0
             species.append(SpeciesEntry(name=name, stoich=stoich,
-                                        is_reactant=is_reactant, C0=c0))
+                                        is_reactant=is_reactant, C0=c0,
+                                        C_feed=c_feed))
         self._item.reaction.species = species
         self._update_reaction_preview()
         self._item.update()
