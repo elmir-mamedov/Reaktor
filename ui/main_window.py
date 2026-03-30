@@ -4,10 +4,11 @@ from PyQt6.QtCore import Qt, QSize
 from PyQt6.QtGui import QAction
 
 from ui.palette_panel import PalettePanel
-from ui.flowsheet_canvas import FlowsheetScene, FlowsheetView, BatchReactorItem
+from ui.flowsheet_canvas import FlowsheetScene, FlowsheetView, BatchReactorItem, CSTRReactorItem
 from ui.properties_panel import PropertiesPanel
 from ui.results_panel import ResultsPanel
 from models.batch_reactor import simulate
+from models.cstr import simulate_cstr
 
 
 class MainWindow(QMainWindow):
@@ -25,7 +26,7 @@ class MainWindow(QMainWindow):
         self._connect()
 
         self._statusbar.showMessage(
-            "Drag a Batch Reactor from the Equipment palette onto the flowsheet.", 6000)
+            "Drag a Batch Reactor or CSTR from the Equipment palette onto the flowsheet.", 6000)
 
     # ── construction ──────────────────────────────────────────────────────
 
@@ -154,14 +155,14 @@ class MainWindow(QMainWindow):
 
     def _run_selected(self):
         items = [i for i in self._scene.selectedItems()
-                 if isinstance(i, BatchReactorItem)]
+                 if isinstance(i, (BatchReactorItem, CSTRReactorItem))]
         if not items:
             self._statusbar.showMessage(
                 "Select a reactor on the flowsheet first, then press Run.", 4000)
             return
         self._run_reactor(items[0])
 
-    def _run_reactor(self, item: BatchReactorItem):
+    def _run_reactor(self, item):
         from models.reaction import validate
         err = validate(item.reaction)
         if err:
@@ -170,7 +171,13 @@ class MainWindow(QMainWindow):
 
         self._statusbar.showMessage(f"Running {item.name}…")
         try:
-            results = simulate(item.reaction)
+            if isinstance(item, CSTRReactorItem):
+                results = simulate_cstr(item.reaction)
+                result_label = "Steady-state conversion"
+            else:
+                results = simulate(item.reaction)
+                result_label = "Final conversion"
+
             if not results["success"]:
                 self._statusbar.showMessage(
                     f"Solver warning for {item.name}: {results['message']}", 6000)
@@ -181,7 +188,7 @@ class MainWindow(QMainWindow):
             ref = reactants[0].name if reactants else "A"
 
             X_final = float(results["conversion"][-1]) * 100
-            msg = (f"{item.name}  |  Final conversion X{ref} = {X_final:.2f}%  "
+            msg = (f"{item.name}  |  {result_label} X{ref} = {X_final:.2f}%  "
                    f"|  Solver: {results['message']}")
             self._statusbar.showMessage(msg)
             self._tb_info.setText(
