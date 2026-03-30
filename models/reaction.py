@@ -96,16 +96,16 @@ TEMPLATES = {
 # CSTR templates: C0=0 (empty start), C_feed set for reactants
 CSTR_TEMPLATES = {
     "A → B  (1st order)": [
-        SpeciesEntry("A", 1.0, True,  0.0, 1.0),
+        SpeciesEntry("A", 1.0, True,  1.0, 1.0),
         SpeciesEntry("B", 1.0, False, 0.0, 0.0),
     ],
     "A + B → C  (2nd order)": [
-        SpeciesEntry("A", 1.0, True,  0.0, 1.0),
-        SpeciesEntry("B", 1.0, True,  0.0, 1.0),
+        SpeciesEntry("A", 1.0, True,  1.0, 1.0),
+        SpeciesEntry("B", 1.0, True,  1.0, 1.0),
         SpeciesEntry("C", 1.0, False, 0.0, 0.0),
     ],
     "2A → B  (2nd order)": [
-        SpeciesEntry("A", 2.0, True,  0.0, 1.0),
+        SpeciesEntry("A", 2.0, True,  1.0, 1.0),
         SpeciesEntry("B", 1.0, False, 0.0, 0.0),
     ],
     "Custom": [],
@@ -124,7 +124,7 @@ def default_cstr_reaction() -> CustomReaction:
     """Return a ready-to-use A → B CSTR reaction."""
     return CustomReaction(
         species=[
-            SpeciesEntry("A", 1.0, True,  0.0, 1.0),
+            SpeciesEntry("A", 1.0, True,  1.0, 1.0),
             SpeciesEntry("B", 1.0, False, 0.0, 0.0),
         ],
         reactor_type="cstr",
