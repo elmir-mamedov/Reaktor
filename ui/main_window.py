@@ -163,12 +163,7 @@ class MainWindow(QMainWindow):
         self._tb_info.setText("  No reactor selected")
 
     def _run_selected(self):
-        items = [i for i in self._scene.selectedItems()
-                 if isinstance(i, (BatchReactorItem, CSTRReactorItem, HeaterCoolerItem))]
-        if not items:
-            self._run_all()
-            return
-        self._run_reactor(items[0])
+        self._run_all()
 
     def _run_all(self):
         """Run every block on the canvas. Heaters that feed a CSTR are skipped
@@ -278,6 +273,7 @@ class MainWindow(QMainWindow):
                             f"Solver warning for {item.name}: {sol.message}", 6000)
 
                     item._last_results = ("coupled", heater_results, cstr_results)
+                    upstream._last_results = ("heater", heater_results)
                     self._results.display_coupled(heater_results, cstr_results, item.name)
                     X_final = float(conversion[-1]) * 100
                     ref_name = ref.name
