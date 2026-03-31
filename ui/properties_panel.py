@@ -22,8 +22,9 @@ class PropertiesPanel(QWidget):
         super().__init__(parent)
         self.setMinimumWidth(260)
         self.setMaximumWidth(320)
-        self._item = None       # current BatchReactorItem
-        self._loading = False   # suppress callbacks while populating
+        self._item = None               # current flowsheet item
+        self._upstream_heater = None    # HeaterCoolerItem connected upstream (CSTR only)
+        self._loading = False           # suppress callbacks while populating
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -236,11 +237,12 @@ class PropertiesPanel(QWidget):
 
     # ── public slots ──────────────────────────────────────────────────────
 
-    def load_reactor(self, item):
+    def load_reactor(self, item, upstream_heater=None):
         """Populate the panel from any flowsheet item (reactor or heater)."""
         from ui.flowsheet_canvas import HeaterCoolerItem
         self._loading = True
         self._item = item
+        self._upstream_heater = upstream_heater
 
         self._placeholder.setVisible(False)
         self._form_widget.setVisible(True)
@@ -280,11 +282,13 @@ class PropertiesPanel(QWidget):
             if is_cstr:
                 self._tau_spin.setValue(r.tau)
             self._load_species(r)
+            self._apply_heater_lock()
 
         self._loading = False
 
     def clear(self):
         self._item = None
+        self._upstream_heater = None
         self._form_widget.setVisible(False)
         self._placeholder.setVisible(True)
 
@@ -308,7 +312,7 @@ class PropertiesPanel(QWidget):
         self._item.update()
 
     def _on_arrhenius_toggled(self, checked: bool):
-        self._set_arrhenius_visible(checked)
+        self._set_arrhenius_visible(checked or self._upstream_heater is not None)
         self._update()
 
     def _on_run(self):
@@ -462,12 +466,29 @@ class PropertiesPanel(QWidget):
         w.setDecimals(dec)
         return w
 
+    def _apply_heater_lock(self):
+        """Lock/unlock the T spin based on whether an upstream heater is connected."""
+        heater = self._upstream_heater
+        if heater is not None:
+            self._set_arrhenius_visible(True)
+            self._T_spin.setValue(heater.config.T_target)
+            self._T_spin.setEnabled(False)
+            self._T_lbl.setText("T (K):  \u2190 Heater")
+            self._T_spin.setToolTip(
+                f"Controlled by connected Heater / Cooler\n"
+                f"T_target = {heater.config.T_target:.2f} K")
+        else:
+            self._T_spin.setEnabled(True)
+            self._T_lbl.setText("T (K):")
+            self._T_spin.setToolTip("")
+
     def _set_arrhenius_visible(self, show: bool):
-        self._k_lbl.setVisible(not show)
-        self._k_spin.setVisible(not show)
-        self._A_lbl.setVisible(show)
-        self._A_spin.setVisible(show)
-        self._Ea_lbl.setVisible(show)
-        self._Ea_spin.setVisible(show)
-        self._T_lbl.setVisible(show)
-        self._T_spin.setVisible(show)
+        effective = show or self._upstream_heater is not None
+        self._k_lbl.setVisible(not effective)
+        self._k_spin.setVisible(not effective)
+        self._A_lbl.setVisible(effective)
+        self._A_spin.setVisible(effective)
+        self._Ea_lbl.setVisible(effective)
+        self._Ea_spin.setVisible(effective)
+        self._T_lbl.setVisible(effective)
+        self._T_spin.setVisible(effective)
