@@ -195,6 +195,66 @@ class MainWindow(QMainWindow):
         self._statusbar.showMessage(f"Running {item.name}…")
         try:
             if isinstance(item, CSTRReactorItem):
+                upstream = self._scene.get_upstream_heater(item)
+                if upstream is not None:
+                    import numpy as np
+                    from models.coupled import simulate_coupled
+                    from models.heater import build_rhs as h_rhs, extract_outputs as h_out
+                    from models.cstr import build_rhs as c_rhs, extract_outputs as c_out
+
+                    h_fn, h_y0 = h_rhs(upstream.config)
+                    c_fn, c_y0 = c_rhs(item.reaction)
+                    units = [
+                        (h_fn, h_y0, h_out),
+                        (c_fn, c_y0, lambda y: c_out(y, item.reaction)),
+                    ]
+                    connections = [(0, "temperature", 1, "temperature")]
+                    t_end = max(upstream.config.t_end, item.reaction.t_end)
+                    n_pts = max(upstream.config.n_points, item.reaction.n_points)
+                    t_eval = np.linspace(0.0, t_end, n_pts)
+                    sol, offsets, sizes = simulate_coupled(
+                        units, connections, (0.0, t_end), t_eval)
+
+                    h_y = sol.y[offsets[0]:offsets[1]]
+                    c_y = sol.y[offsets[1]:offsets[2]]
+                    idx = {s.name: i for i, s in enumerate(item.reaction.species)}
+                    reactants = [s for s in item.reaction.species if s.is_reactant]
+                    ref = reactants[0]
+                    Ca_feed = ref.C_feed
+                    Ca_idx = idx[ref.name]
+                    conversion = (1.0 - c_y[Ca_idx] / Ca_feed) if Ca_feed > 0 else np.zeros_like(sol.t)
+
+                    heater_results = {
+                        "t": sol.t,
+                        "temperature": h_y[0],
+                        "approach": (h_y[0] - upstream.config.T0) / (upstream.config.T_target - upstream.config.T0) * 100
+                        if abs(upstream.config.T_target - upstream.config.T0) > 1e-9
+                        else np.full_like(sol.t, 100.0),
+                        "success": sol.success,
+                        "message": sol.message,
+                    }
+                    cstr_results = {
+                        "t": sol.t,
+                        "concentrations": {s.name: c_y[idx[s.name]] for s in item.reaction.species},
+                        "conversion": conversion,
+                        "success": sol.success,
+                        "message": sol.message,
+                    }
+
+                    if not sol.success:
+                        self._statusbar.showMessage(
+                            f"Solver warning for {item.name}: {sol.message}", 6000)
+
+                    self._results.display_coupled(heater_results, cstr_results, item.name)
+                    X_final = float(conversion[-1]) * 100
+                    ref_name = ref.name
+                    msg = (f"{item.name} (coupled)  |  X{ref_name} = {X_final:.2f}%"
+                           f"  |  T_final = {float(h_y[0, -1]):.2f} K"
+                           f"  |  Solver: {sol.message}")
+                    self._statusbar.showMessage(msg)
+                    self._tb_info.setText(f"  {item.name}  •  X{ref_name} = {X_final:.2f}%")
+                    return
+
                 results = simulate_cstr(item.reaction)
                 result_label = "Steady-state conversion"
             else:

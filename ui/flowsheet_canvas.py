@@ -1,9 +1,10 @@
 from __future__ import annotations
+import math
 from typing import TYPE_CHECKING
 
 from PyQt6.QtWidgets import (QGraphicsScene, QGraphicsView, QGraphicsItem,
-                              QMenu)
-from PyQt6.QtCore import Qt, QRectF, QPointF, pyqtSignal
+                              QGraphicsLineItem, QMenu)
+from PyQt6.QtCore import Qt, QRectF, QPointF, QLineF, pyqtSignal
 from PyQt6.QtGui import (QPainter, QPen, QBrush, QColor, QFont,
                           QTransform, QAction, QPainterPath)
 
@@ -25,6 +26,8 @@ _CEH = 18     # CSTR ellipse height
 _HW = 90      # heater body width
 _HH = 46      # heater body height
 
+_PORT_RADIUS = 12   # px — how close cursor must be to snap to a port
+
 
 class BatchReactorItem(QGraphicsItem):
     """PFD symbol for a batch reactor, rendered with a custom painter."""
@@ -35,8 +38,9 @@ class BatchReactorItem(QGraphicsItem):
         super().__init__()
         self.name = name
         self.reaction = default_reaction()
-        self._scene_ref = scene  # kept to call scene methods (no QObject signal)
+        self._scene_ref = scene
         self._hovered = False
+        self._connected_streams: list[StreamItem] = []
 
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
@@ -46,7 +50,6 @@ class BatchReactorItem(QGraphicsItem):
     # ── bounding rect / shape ─────────────────────────────────────────────
 
     def boundingRect(self) -> QRectF:
-        # extra room for nozzle above and label below
         return QRectF(-_W / 2 - 8, -_H / 2 - 26, _W + 16, _H + 52)
 
     # ── events ────────────────────────────────────────────────────────────
@@ -60,12 +63,15 @@ class BatchReactorItem(QGraphicsItem):
         self.update()
 
     def itemChange(self, change, value):
+        if change == QGraphicsItem.GraphicsItemChange.ItemPositionHasChanged:
+            for stream in self._connected_streams:
+                stream.prepareGeometryChange()
+                stream.update()
         if change == QGraphicsItem.GraphicsItemChange.ItemSelectedHasChanged:
             if self._scene_ref is not None:
                 if value:
                     self._scene_ref._notify_selected(self)
                 else:
-                    # Only deselect if nothing else is selected
                     if not self._scene_ref.selectedItems():
                         self._scene_ref._notify_deselected()
         return super().itemChange(change, value)
@@ -98,52 +104,41 @@ class BatchReactorItem(QGraphicsItem):
 
         w, h, eh = _W, _H, _EH
 
-        # Vessel body rectangle
         painter.drawRect(QRectF(-w / 2, -h / 2 + eh / 2, w, h - eh))
-        # Top ellipse
         painter.drawEllipse(QRectF(-w / 2, -h / 2, w, eh))
-        # Bottom ellipse
         painter.drawEllipse(QRectF(-w / 2, h / 2 - eh, w, eh))
-
-        # Nozzle on top
         painter.drawRect(QRectF(-5, -h / 2 - 18, 10, 18))
 
-        # Agitator shaft
         agit_pen = QPen(border, 1.2)
         painter.setPen(agit_pen)
         shaft_top = -h / 2 + eh / 2
         shaft_bot = h / 2 - eh / 2
         painter.drawLine(QPointF(0, shaft_top), QPointF(0, shaft_bot))
-
-        # Agitator blades (two sets)
         blen = w * 0.36
         for blade_y in (-h * 0.18, h * 0.18):
             painter.drawLine(QPointF(-blen, blade_y), QPointF(blen, blade_y))
 
-        # Selection highlight (dashed border)
         if selected:
             sel_pen = QPen(QColor("#3498db"), 1.2, Qt.PenStyle.DashLine)
             painter.setPen(sel_pen)
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.drawRect(self.boundingRect().adjusted(3, 3, -3, -3))
 
-        # Reactor name label (below vessel)
         painter.setPen(QPen(QColor("#1a3a5c")))
         painter.setFont(QFont("", 9, QFont.Weight.Bold))
-        painter.drawText(
-            QRectF(-w / 2, h / 2 + 6, w, 18),
-            Qt.AlignmentFlag.AlignCenter, self.name)
+        painter.drawText(QRectF(-w / 2, h / 2 + 6, w, 18),
+                         Qt.AlignmentFlag.AlignCenter, self.name)
 
-        # Reaction label hint (inside vessel body)
         painter.setFont(QFont("", 7))
         painter.setPen(QPen(QColor("#5d6d7e")))
         rstr = self.reaction.reaction_label()
         if len(rstr) > 12:
             rstr = rstr[:11] + "…"
-        painter.drawText(
-            QRectF(-w / 2, -h / 2 + eh + 3, w, 14),
-            Qt.AlignmentFlag.AlignCenter, rstr)
+        painter.drawText(QRectF(-w / 2, -h / 2 + eh + 3, w, 14),
+                         Qt.AlignmentFlag.AlignCenter, rstr)
 
+
+# ── Shared helpers ────────────────────────────────────────────────────────────
 
 def _draw_arrowhead(painter: QPainter, tip_x: float, tip_y: float,
                     size: float, color: QColor):
@@ -152,6 +147,26 @@ def _draw_arrowhead(painter: QPainter, tip_x: float, tip_y: float,
         QPointF(tip_x, tip_y),
         QPointF(tip_x - size, tip_y - size * 0.5),
         QPointF(tip_x - size, tip_y + size * 0.5),
+    ])
+    painter.setPen(QPen(color, 0))
+    painter.setBrush(QBrush(color))
+    painter.drawPolygon(poly)
+
+
+def _draw_arrowhead_dir(painter: QPainter, tip: QPointF,
+                        direction: QPointF, size: float, color: QColor):
+    """Draw an arrowhead at tip pointing in the given direction."""
+    length = math.sqrt(direction.x() ** 2 + direction.y() ** 2)
+    if length < 1e-9:
+        return
+    dx, dy = direction.x() / length, direction.y() / length
+    px, py = -dy, dx          # perpendicular
+    poly = QPolygonF([
+        QPointF(tip.x(), tip.y()),
+        QPointF(tip.x() - size * dx + size * 0.45 * px,
+                tip.y() - size * dy + size * 0.45 * py),
+        QPointF(tip.x() - size * dx - size * 0.45 * px,
+                tip.y() - size * dy - size * 0.45 * py),
     ])
     painter.setPen(QPen(color, 0))
     painter.setBrush(QBrush(color))
@@ -169,6 +184,7 @@ class CSTRReactorItem(QGraphicsItem):
         self.reaction = default_cstr_reaction()
         self._scene_ref = scene
         self._hovered = False
+        self._connected_streams: list[StreamItem] = []
 
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
@@ -177,6 +193,10 @@ class CSTRReactorItem(QGraphicsItem):
 
     def boundingRect(self) -> QRectF:
         return QRectF(-_CW / 2 - 30, -_CH / 2 - 10, _CW + 60, _CH + 42)
+
+    def input_scene_ports(self) -> list[QPointF]:
+        """Input port positions in scene coordinates."""
+        return [self.mapToScene(QPointF(-_CW / 2 - 22, -_CH / 4))]
 
     def hoverEnterEvent(self, event):
         self._hovered = True
@@ -187,6 +207,10 @@ class CSTRReactorItem(QGraphicsItem):
         self.update()
 
     def itemChange(self, change, value):
+        if change == QGraphicsItem.GraphicsItemChange.ItemPositionHasChanged:
+            for stream in self._connected_streams:
+                stream.prepareGeometryChange()
+                stream.update()
         if change == QGraphicsItem.GraphicsItemChange.ItemSelectedHasChanged:
             if self._scene_ref is not None:
                 if value:
@@ -222,58 +246,55 @@ class CSTRReactorItem(QGraphicsItem):
 
         w, h, eh = _CW, _CH, _CEH
 
-        # Vessel body
         painter.drawRect(QRectF(-w / 2, -h / 2 + eh / 2, w, h - eh))
         painter.drawEllipse(QRectF(-w / 2, -h / 2, w, eh))
         painter.drawEllipse(QRectF(-w / 2, h / 2 - eh, w, eh))
 
-        # Inlet pipe (upper left)
         inlet_y = -h / 4
         painter.setPen(QPen(border, bw))
         painter.setBrush(Qt.BrushStyle.NoBrush)
         painter.drawLine(QPointF(-w / 2 - 22, inlet_y), QPointF(-w / 2, inlet_y))
         _draw_arrowhead(painter, -w / 2 + 1, inlet_y, 6, border)
 
-        # Outlet pipe (lower right)
         outlet_y = h / 4
         painter.setPen(QPen(border, bw))
         painter.drawLine(QPointF(w / 2, outlet_y), QPointF(w / 2 + 22, outlet_y))
         _draw_arrowhead(painter, w / 2 + 22, outlet_y, 6, border)
 
-        # Agitator shaft
         painter.setPen(QPen(border, 1.2))
         painter.setBrush(Qt.BrushStyle.NoBrush)
         shaft_top = -h / 2 + eh / 2
         shaft_bot = h / 2 - eh / 2
         painter.drawLine(QPointF(0, shaft_top), QPointF(0, shaft_bot))
-
         blen = w * 0.36
         for blade_y in (-h * 0.15, h * 0.15):
             painter.drawLine(QPointF(-blen, blade_y), QPointF(blen, blade_y))
 
-        # Selection highlight
         if selected:
             sel_pen = QPen(QColor("#2ecc71"), 1.2, Qt.PenStyle.DashLine)
             painter.setPen(sel_pen)
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.drawRect(self.boundingRect().adjusted(3, 3, -3, -3))
 
-        # Name label
         painter.setPen(QPen(QColor("#145a32")))
         painter.setFont(QFont("", 9, QFont.Weight.Bold))
-        painter.drawText(
-            QRectF(-w / 2, h / 2 + 6, w, 18),
-            Qt.AlignmentFlag.AlignCenter, self.name)
+        painter.drawText(QRectF(-w / 2, h / 2 + 6, w, 18),
+                         Qt.AlignmentFlag.AlignCenter, self.name)
 
-        # Reaction label inside vessel
         painter.setFont(QFont("", 7))
         painter.setPen(QPen(QColor("#5d6d7e")))
         rstr = self.reaction.reaction_label()
         if len(rstr) > 12:
             rstr = rstr[:11] + "…"
-        painter.drawText(
-            QRectF(-w / 2, -h / 2 + eh + 3, w, 14),
-            Qt.AlignmentFlag.AlignCenter, rstr)
+        painter.drawText(QRectF(-w / 2, -h / 2 + eh + 3, w, 14),
+                         Qt.AlignmentFlag.AlignCenter, rstr)
+
+        # Input port indicator (shown when hovered or selected)
+        if hovered or selected:
+            port_local = QPointF(-w / 2 - 22, -h / 4)
+            painter.setBrush(QBrush(QColor("#ffffff")))
+            painter.setPen(QPen(border, 1.5))
+            painter.drawEllipse(port_local, 5, 5)
 
 
 def _draw_wave_line(painter: QPainter, x0: float, y0: float,
@@ -303,6 +324,7 @@ class HeaterCoolerItem(QGraphicsItem):
         self.config = HeaterConfig()
         self._scene_ref = scene
         self._hovered = False
+        self._connected_streams: list[StreamItem] = []
 
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
@@ -311,6 +333,10 @@ class HeaterCoolerItem(QGraphicsItem):
 
     def boundingRect(self) -> QRectF:
         return QRectF(-_HW / 2 - 30, -_HH / 2 - 8, _HW + 60, _HH + 36)
+
+    def output_scene_ports(self) -> list[QPointF]:
+        """Output port positions in scene coordinates."""
+        return [self.mapToScene(QPointF(_HW / 2 + 22, 0))]
 
     def hoverEnterEvent(self, event):
         self._hovered = True
@@ -321,6 +347,10 @@ class HeaterCoolerItem(QGraphicsItem):
         self.update()
 
     def itemChange(self, change, value):
+        if change == QGraphicsItem.GraphicsItemChange.ItemPositionHasChanged:
+            for stream in self._connected_streams:
+                stream.prepareGeometryChange()
+                stream.update()
         if change == QGraphicsItem.GraphicsItemChange.ItemSelectedHasChanged:
             if self._scene_ref is not None:
                 if value:
@@ -352,23 +382,19 @@ class HeaterCoolerItem(QGraphicsItem):
         pen = QPen(border, bw)
         w, h = _HW, _HH
 
-        # Body rectangle
         painter.setPen(pen)
         painter.setBrush(QBrush(body_fill))
         painter.drawRect(QRectF(-w / 2, -h / 2, w, h))
 
-        # Inlet pipe (left)
         painter.setPen(QPen(border, bw))
         painter.setBrush(Qt.BrushStyle.NoBrush)
         painter.drawLine(QPointF(-w / 2 - 22, 0), QPointF(-w / 2, 0))
         _draw_arrowhead(painter, -w / 2 + 1, 0, 6, border)
 
-        # Outlet pipe (right)
         painter.setPen(QPen(border, bw))
         painter.drawLine(QPointF(w / 2, 0), QPointF(w / 2 + 22, 0))
         _draw_arrowhead(painter, w / 2 + 22, 0, 6, border)
 
-        # Wavy heat-exchange lines inside body
         painter.setPen(QPen(border, 1.5))
         painter.setBrush(Qt.BrushStyle.NoBrush)
         inner_w = w - 16
@@ -376,78 +402,173 @@ class HeaterCoolerItem(QGraphicsItem):
         for wave_y in (-h / 5, h / 5):
             _draw_wave_line(painter, x0, wave_y, inner_w, h / 9, 3)
 
-        # Selection highlight
         if selected:
             sel_pen = QPen(QColor("#e67e22"), 1.2, Qt.PenStyle.DashLine)
             painter.setPen(sel_pen)
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.drawRect(self.boundingRect().adjusted(3, 3, -3, -3))
 
-        # Name label below
         painter.setPen(QPen(QColor("#784212")))
         painter.setFont(QFont("", 9, QFont.Weight.Bold))
-        painter.drawText(
-            QRectF(-w / 2, h / 2 + 4, w, 18),
-            Qt.AlignmentFlag.AlignCenter, self.name)
+        painter.drawText(QRectF(-w / 2, h / 2 + 4, w, 18),
+                         Qt.AlignmentFlag.AlignCenter, self.name)
 
-        # Temperature target hint inside
         painter.setFont(QFont("", 7))
         painter.setPen(QPen(QColor("#784212")))
         hint = f"\u2192 {self.config.T_target:.1f} K"
-        painter.drawText(
-            QRectF(-w / 2, -h / 2 + 3, w, 14),
-            Qt.AlignmentFlag.AlignCenter, hint)
+        painter.drawText(QRectF(-w / 2, -h / 2 + 3, w, 14),
+                         Qt.AlignmentFlag.AlignCenter, hint)
+
+        # Output port indicator (shown when hovered or selected)
+        if hovered or selected:
+            port_local = QPointF(w / 2 + 22, 0)
+            painter.setBrush(QBrush(QColor("#ffffff")))
+            painter.setPen(QPen(border, 1.5))
+            painter.drawEllipse(port_local, 5, 5)
+
+
+# ── Stream ────────────────────────────────────────────────────────────────────
+
+class StreamItem(QGraphicsItem):
+    """A directed connection arrow between two unit operations."""
+
+    def __init__(self, source: HeaterCoolerItem, dest: CSTRReactorItem):
+        super().__init__()
+        self.source = source
+        self.dest = dest
+        self.setZValue(-1)
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, False)
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, False)
+        source._connected_streams.append(self)
+        dest._connected_streams.append(self)
+
+    def _bezier_data(self):
+        """Return (path, p0, p3, cp2) computed from live port positions."""
+        p0 = self.source.output_scene_ports()[0]
+        p3 = self.dest.input_scene_ports()[0]
+        dx = max(abs(p3.x() - p0.x()) * 0.5, 40.0)
+        cp1 = QPointF(p0.x() + dx, p0.y())
+        cp2 = QPointF(p3.x() - dx, p3.y())
+        path = QPainterPath()
+        path.moveTo(p0)
+        path.cubicTo(cp1, cp2, p3)
+        return path, p0, p3, cp2
+
+    def boundingRect(self) -> QRectF:
+        try:
+            path, _, _, _ = self._bezier_data()
+            return path.boundingRect().adjusted(-12, -12, 12, 12)
+        except Exception:
+            return QRectF(-5000, -5000, 10000, 10000)
+
+    def paint(self, painter: QPainter, option, widget):
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        try:
+            path, p0, p3, cp2 = self._bezier_data()
+        except Exception:
+            return
+
+        color = QColor("#7f8c8d")
+        painter.setPen(QPen(color, 2.0))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawPath(path)
+
+        # Arrowhead pointing from cp2 → p3
+        direction = QPointF(p3.x() - cp2.x(), p3.y() - cp2.y())
+        _draw_arrowhead_dir(painter, p3, direction, 8, color)
 
 
 # ── Scene ─────────────────────────────────────────────────────────────────────
 
 class FlowsheetScene(QGraphicsScene):
-    reactor_selected = pyqtSignal(object)   # BatchReactorItem
+    reactor_selected = pyqtSignal(object)
     reactor_deselected = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setSceneRect(-2000, -2000, 4000, 4000)
         self._counter = 0
+        self._streams: list[StreamItem] = []
 
-    # ── public API ────────────────────────────────────────────────────────
+    # ── unit creation ─────────────────────────────────────────────────────
 
     def add_reactor(self, pos: QPointF) -> BatchReactorItem:
         self._counter += 1
-        name = f"R-{100 + self._counter - 1}"
-        item = BatchReactorItem(name, scene=self)
+        item = BatchReactorItem(f"R-{100 + self._counter - 1}", scene=self)
         item.setPos(pos)
         self.addItem(item)
         return item
 
     def add_cstr(self, pos: QPointF) -> CSTRReactorItem:
         self._counter += 1
-        name = f"R-{100 + self._counter - 1}"
-        item = CSTRReactorItem(name, scene=self)
+        item = CSTRReactorItem(f"R-{100 + self._counter - 1}", scene=self)
         item.setPos(pos)
         self.addItem(item)
         return item
 
     def add_heater(self, pos: QPointF) -> HeaterCoolerItem:
         self._counter += 1
-        name = f"H-{100 + self._counter - 1}"
-        item = HeaterCoolerItem(name, scene=self)
+        item = HeaterCoolerItem(f"H-{100 + self._counter - 1}", scene=self)
         item.setPos(pos)
         self.addItem(item)
         return item
 
-    # ── called by BatchReactorItem.itemChange ─────────────────────────────
+    # ── stream management ─────────────────────────────────────────────────
 
-    def _notify_selected(self, item: BatchReactorItem):
+    def add_stream(self, source: HeaterCoolerItem,
+                   dest: CSTRReactorItem) -> StreamItem:
+        # Remove any existing connection to the same dest
+        self.remove_streams_for(dest, role="dest")
+        stream = StreamItem(source, dest)
+        self._streams.append(stream)
+        self.addItem(stream)
+        return stream
+
+    def remove_streams_for(self, item, role: str = "any"):
+        """Remove streams connected to item (role: 'source', 'dest', or 'any')."""
+        to_remove = []
+        for s in self._streams:
+            if role in ("any", "source") and s.source is item:
+                to_remove.append(s)
+            elif role in ("any", "dest") and s.dest is item:
+                to_remove.append(s)
+        for s in to_remove:
+            if s.source in (s.source, item):
+                s.source._connected_streams.discard if hasattr(
+                    s.source._connected_streams, "discard") else None
+                try:
+                    s.source._connected_streams.remove(s)
+                except ValueError:
+                    pass
+            try:
+                s.dest._connected_streams.remove(s)
+            except ValueError:
+                pass
+            self._streams.remove(s)
+            self.removeItem(s)
+
+    def get_upstream_heater(self, cstr: CSTRReactorItem):
+        """Return the HeaterCoolerItem connected to cstr's input, or None."""
+        for s in self._streams:
+            if s.dest is cstr:
+                return s.source
+        return None
+
+    # ── notifications ─────────────────────────────────────────────────────
+
+    def _notify_selected(self, item):
         self.reactor_selected.emit(item)
 
     def _notify_deselected(self):
         self.reactor_deselected.emit()
 
-    # ── context menu (right-click on background) ──────────────────────────
+    # ── context menu ──────────────────────────────────────────────────────
 
     def contextMenuEvent(self, event):
         item = self.itemAt(event.scenePos(), QTransform())
+        # Ignore clicks on stream arrows
+        if isinstance(item, StreamItem):
+            item = None
         menu = QMenu()
 
         if item is None:
@@ -459,22 +580,20 @@ class FlowsheetScene(QGraphicsScene):
             menu.addAction(add_heater_act)
             chosen = menu.exec(event.screenPos())
             if chosen == add_batch_act:
-                reactor = self.add_reactor(event.scenePos())
-                self.clearSelection()
-                reactor.setSelected(True)
+                r = self.add_reactor(event.scenePos())
+                self.clearSelection(); r.setSelected(True)
             elif chosen == add_cstr_act:
-                reactor = self.add_cstr(event.scenePos())
-                self.clearSelection()
-                reactor.setSelected(True)
+                r = self.add_cstr(event.scenePos())
+                self.clearSelection(); r.setSelected(True)
             elif chosen == add_heater_act:
-                reactor = self.add_heater(event.scenePos())
-                self.clearSelection()
-                reactor.setSelected(True)
+                r = self.add_heater(event.scenePos())
+                self.clearSelection(); r.setSelected(True)
         elif isinstance(item, (BatchReactorItem, CSTRReactorItem, HeaterCoolerItem)):
             del_act = QAction(f"Delete  {item.name}")
             menu.addAction(del_act)
             chosen = menu.exec(event.screenPos())
             if chosen == del_act:
+                self.remove_streams_for(item)
                 self.removeItem(item)
                 self.reactor_deselected.emit()
 
@@ -482,7 +601,7 @@ class FlowsheetScene(QGraphicsScene):
 # ── View ──────────────────────────────────────────────────────────────────────
 
 class FlowsheetView(QGraphicsView):
-    """Zoomable, pannable flowsheet canvas with drop support."""
+    """Zoomable, pannable flowsheet canvas with drop and connection support."""
 
     def __init__(self, scene: FlowsheetScene, parent=None):
         super().__init__(scene, parent)
@@ -496,18 +615,20 @@ class FlowsheetView(QGraphicsView):
         self._mid_panning = False
         self._pan_origin = QPointF()
 
+        # Connection drag state
+        self._connecting = False
+        self._conn_source: HeaterCoolerItem | None = None
+        self._temp_line: QGraphicsLineItem | None = None
+
     # ── background grid ───────────────────────────────────────────────────
 
     def drawBackground(self, painter: QPainter, rect: QRectF):
         painter.fillRect(rect, QColor("#fafafa"))
-
         grid = 25
         left = int(rect.left()) - (int(rect.left()) % grid)
         top = int(rect.top()) - (int(rect.top()) % grid)
-
         dot_pen = QPen(QColor("#d5d8dc"), 1)
         painter.setPen(dot_pen)
-
         x = left
         while x <= int(rect.right()) + grid:
             y = top
@@ -522,15 +643,46 @@ class FlowsheetView(QGraphicsView):
         factor = 1.15 if event.angleDelta().y() > 0 else 1.0 / 1.15
         self.scale(factor, factor)
 
-    # ── middle-mouse pan ──────────────────────────────────────────────────
+    # ── port detection ────────────────────────────────────────────────────
+
+    def _port_at(self, scene_pos: QPointF):
+        """Return (item, 'in'|'out') if scene_pos is near a port, else None."""
+        sc = self.scene()
+        for item in sc.items():
+            if isinstance(item, HeaterCoolerItem):
+                for port in item.output_scene_ports():
+                    if _dist(scene_pos, port) < _PORT_RADIUS:
+                        return (item, "out")
+            elif isinstance(item, CSTRReactorItem):
+                for port in item.input_scene_ports():
+                    if _dist(scene_pos, port) < _PORT_RADIUS:
+                        return (item, "in")
+        return None
+
+    # ── mouse events ──────────────────────────────────────────────────────
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.MiddleButton:
             self._mid_panning = True
             self._pan_origin = event.position()
             self.setCursor(Qt.CursorShape.ClosedHandCursor)
-        else:
-            super().mousePressEvent(event)
+            return
+
+        if event.button() == Qt.MouseButton.LeftButton:
+            scene_pos = self.mapToScene(event.position().toPoint())
+            hit = self._port_at(scene_pos)
+            if hit is not None and hit[1] == "out":
+                # Start connection drag from output port
+                self._connecting = True
+                self._conn_source = hit[0]
+                port = hit[0].output_scene_ports()[0]
+                self._temp_line = self.scene().addLine(
+                    QLineF(port, port),
+                    QPen(QColor("#7f8c8d"), 1.5, Qt.PenStyle.DashLine))
+                self.setCursor(Qt.CursorShape.CrossCursor)
+                return
+
+        super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
         if self._mid_panning:
@@ -540,15 +692,43 @@ class FlowsheetView(QGraphicsView):
                 int(self.horizontalScrollBar().value() - delta.x()))
             self.verticalScrollBar().setValue(
                 int(self.verticalScrollBar().value() - delta.y()))
-        else:
-            super().mouseMoveEvent(event)
+            return
+
+        if self._connecting and self._temp_line is not None:
+            scene_pos = self.mapToScene(event.position().toPoint())
+            src_port = self._conn_source.output_scene_ports()[0]
+            self._temp_line.setLine(QLineF(src_port, scene_pos))
+            # Highlight nearby input ports
+            hit = self._port_at(scene_pos)
+            if hit is not None and hit[1] == "in":
+                self.setCursor(Qt.CursorShape.PointingHandCursor)
+            else:
+                self.setCursor(Qt.CursorShape.CrossCursor)
+            return
+
+        super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.MouseButton.MiddleButton:
             self._mid_panning = False
             self.setCursor(Qt.CursorShape.ArrowCursor)
-        else:
-            super().mouseReleaseEvent(event)
+            return
+
+        if event.button() == Qt.MouseButton.LeftButton and self._connecting:
+            scene_pos = self.mapToScene(event.position().toPoint())
+            hit = self._port_at(scene_pos)
+            sc = self.scene()
+            if self._temp_line is not None:
+                sc.removeItem(self._temp_line)
+                self._temp_line = None
+            if hit is not None and hit[1] == "in":
+                sc.add_stream(self._conn_source, hit[0])
+            self._connecting = False
+            self._conn_source = None
+            self.setCursor(Qt.CursorShape.ArrowCursor)
+            return
+
+        super().mouseReleaseEvent(event)
 
     # ── keyboard ──────────────────────────────────────────────────────────
 
@@ -556,6 +736,8 @@ class FlowsheetView(QGraphicsView):
         if event.key() == Qt.Key.Key_Delete:
             sc = self.scene()
             for item in list(sc.selectedItems()):
+                if isinstance(item, (BatchReactorItem, CSTRReactorItem, HeaterCoolerItem)):
+                    sc.remove_streams_for(item)
                 sc.removeItem(item)
             sc.reactor_deselected.emit()
         elif event.key() == Qt.Key.Key_F:
@@ -597,3 +779,9 @@ class FlowsheetView(QGraphicsView):
                 sc.clearSelection()
                 reactor.setSelected(True)
             event.acceptProposedAction()
+
+
+# ── Utilities ─────────────────────────────────────────────────────────────────
+
+def _dist(a: QPointF, b: QPointF) -> float:
+    return math.sqrt((a.x() - b.x()) ** 2 + (a.y() - b.y()) ** 2)

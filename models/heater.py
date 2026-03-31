@@ -12,6 +12,21 @@ class HeaterConfig:
     n_points: int = 500
 
 
+def build_rhs(config: HeaterConfig):
+    """Return (rhs_fn, y0) for standalone or coupled simulation.
+
+    rhs_fn signature: rhs(t, y_local, context) -> list
+    """
+    def rhs(t, y, context=None):
+        return [(config.T_target - y[0]) / config.tau]
+    return rhs, [config.T0]
+
+
+def extract_outputs(y) -> dict:
+    """Named outputs from heater state vector."""
+    return {"temperature": float(y[0])}
+
+
 def simulate_heater(config: HeaterConfig) -> dict:
     """
     Simulate a heater/cooler using a first-order dynamic model.
@@ -25,21 +40,21 @@ def simulate_heater(config: HeaterConfig) -> dict:
         success     - bool
         message     - solver status message
     """
+    rhs_fn, y0 = build_rhs(config)
     t_eval = np.linspace(0.0, config.t_end, config.n_points)
 
-    def rhs(t, y):
-        return [(config.T_target - y[0]) / config.tau]
-
     sol = solve_ivp(
-        rhs, (0.0, config.t_end), [config.T0],
+        lambda t, y: rhs_fn(t, y),
+        (0.0, config.t_end), y0,
         t_eval=t_eval, method="RK45", rtol=1e-8, atol=1e-11,
     )
 
     dT = config.T_target - config.T0
-    if abs(dT) > 1e-9:
-        approach = (sol.y[0] - config.T0) / dT * 100.0
-    else:
-        approach = np.full_like(sol.t, 100.0)
+    approach = (
+        (sol.y[0] - config.T0) / dT * 100.0
+        if abs(dT) > 1e-9
+        else np.full_like(sol.t, 100.0)
+    )
 
     return {
         "t": sol.t,

@@ -193,3 +193,39 @@ class ResultsPanel(QWidget):
             self._table.setItem(row, 0, QTableWidgetItem(f"{t[idx]:.4f}"))
             self._table.setItem(row, 1, QTableWidgetItem(f"{T[idx]:.4f}"))
             self._table.setItem(row, 2, QTableWidgetItem(f"{A[idx]:.2f}"))
+
+    def display_coupled(self, heater_results: dict, cstr_results: dict, name: str = ""):
+        self._conc_canvas.plot_temperature(heater_results)
+        self._conv_canvas.plot_concentrations(cstr_results)
+        self._populate_coupled_table(heater_results, cstr_results)
+        suffix = f" — {name}" if name else ""
+        self._tabs.setTabText(0, f"Temperature{suffix}")
+        self._tabs.setTabText(1, f"Concentrations{suffix}")
+        self._tabs.setTabText(2, "Data Table")
+
+    def _populate_coupled_table(self, heater_results: dict, cstr_results: dict):
+        t = cstr_results["t"]
+        T = heater_results["temperature"]
+        concs = cstr_results["concentrations"]
+        X = cstr_results["conversion"]
+        species = list(concs.keys())
+
+        headers = ["Time (s)", "T (K)"] + [f"C{s} (mol/L)" for s in species] + ["XA (−)"]
+
+        step = max(1, len(t) // 100)
+        idxs = list(range(0, len(t), step))
+        if idxs[-1] != len(t) - 1:
+            idxs.append(len(t) - 1)
+
+        self._table.setColumnCount(len(headers))
+        self._table.setRowCount(len(idxs))
+        self._table.setHorizontalHeaderLabels(headers)
+
+        for row, idx in enumerate(idxs):
+            self._table.setItem(row, 0, QTableWidgetItem(f"{t[idx]:.4f}"))
+            self._table.setItem(row, 1, QTableWidgetItem(f"{T[idx]:.4f}"))
+            for col, sp in enumerate(species, 2):
+                self._table.setItem(
+                    row, col, QTableWidgetItem(f"{concs[sp][idx]:.6f}"))
+            self._table.setItem(
+                row, len(species) + 2, QTableWidgetItem(f"{X[idx]:.6f}"))
