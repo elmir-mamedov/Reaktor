@@ -166,10 +166,32 @@ class MainWindow(QMainWindow):
         items = [i for i in self._scene.selectedItems()
                  if isinstance(i, (BatchReactorItem, CSTRReactorItem, HeaterCoolerItem))]
         if not items:
-            self._statusbar.showMessage(
-                "Select a reactor on the flowsheet first, then press Run.", 4000)
+            self._run_all()
             return
         self._run_reactor(items[0])
+
+    def _run_all(self):
+        """Run every block on the canvas. Heaters that feed a CSTR are skipped
+        (they are re-run automatically as part of the coupled simulation)."""
+        all_items = [i for i in self._scene.items()
+                     if isinstance(i, (BatchReactorItem, CSTRReactorItem, HeaterCoolerItem))]
+        if not all_items:
+            self._statusbar.showMessage("No blocks on the canvas to run.", 4000)
+            return
+
+        connected_heaters = {s.source for s in self._scene._streams}
+
+        ordered = (
+            [i for i in all_items if isinstance(i, HeaterCoolerItem) and i not in connected_heaters] +
+            [i for i in all_items if isinstance(i, BatchReactorItem)] +
+            [i for i in all_items if isinstance(i, CSTRReactorItem)]
+        )
+
+        for item in ordered:
+            self._run_reactor(item)
+
+        self._statusbar.showMessage(
+            f"All {len(ordered)} block(s) simulated.", 5000)
 
     def _run_reactor(self, item):
         # ── Heater/Cooler path ────────────────────────────────────────────
