@@ -148,6 +148,14 @@ class MainWindow(QMainWindow):
     def _on_reactor_selected(self, item: BatchReactorItem):
         self._props.load_reactor(item)
         self._tb_info.setText(f"  Selected: {item.name}")
+        if item._last_results is not None:
+            kind, *data = item._last_results
+            if kind == "reactor":
+                self._results.display(data[0], item.name)
+            elif kind == "heater":
+                self._results.display_heater(data[0], item.name)
+            elif kind == "coupled":
+                self._results.display_coupled(data[0], data[1], item.name)
 
     def _on_reactor_deselected(self):
         self._props.clear()
@@ -172,6 +180,7 @@ class MainWindow(QMainWindow):
                 if not results["success"]:
                     self._statusbar.showMessage(
                         f"Solver warning for {item.name}: {results['message']}", 6000)
+                item._last_results = ("heater", results)
                 self._results.display_heater(results, item.name)
                 T_final = float(results["temperature"][-1])
                 msg = (f"{item.name}  |  T_final = {T_final:.2f} K"
@@ -245,6 +254,7 @@ class MainWindow(QMainWindow):
                         self._statusbar.showMessage(
                             f"Solver warning for {item.name}: {sol.message}", 6000)
 
+                    item._last_results = ("coupled", heater_results, cstr_results)
                     self._results.display_coupled(heater_results, cstr_results, item.name)
                     X_final = float(conversion[-1]) * 100
                     ref_name = ref.name
@@ -265,6 +275,7 @@ class MainWindow(QMainWindow):
                 self._statusbar.showMessage(
                     f"Solver warning for {item.name}: {results['message']}", 6000)
 
+            item._last_results = ("reactor", results)
             self._results.display(results, item.name)
 
             reactants = [s for s in item.reaction.species if s.is_reactant]

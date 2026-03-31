@@ -41,6 +41,7 @@ class BatchReactorItem(QGraphicsItem):
         self._scene_ref = scene
         self._hovered = False
         self._connected_streams: list[StreamItem] = []
+        self._last_results = None
 
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
@@ -185,6 +186,7 @@ class CSTRReactorItem(QGraphicsItem):
         self._scene_ref = scene
         self._hovered = False
         self._connected_streams: list[StreamItem] = []
+        self._last_results = None
 
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
@@ -325,6 +327,7 @@ class HeaterCoolerItem(QGraphicsItem):
         self._scene_ref = scene
         self._hovered = False
         self._connected_streams: list[StreamItem] = []
+        self._last_results = None
 
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
