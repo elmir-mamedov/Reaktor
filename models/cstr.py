@@ -17,8 +17,9 @@ def build_rhs(reaction: CustomReaction):
     idx = {s.name: i for i, s in enumerate(reaction.species)}
 
     def rhs(t, y, context=None):
-        T = (context or {}).get("temperature", reaction.T)
-        if reaction.use_arrhenius:
+        ctx = context or {}
+        T = ctx.get("temperature", reaction.T)
+        if reaction.use_arrhenius or "temperature" in ctx:
             k = reaction.A_factor * math.exp(-reaction.Ea / (reaction.R * T))
         else:
             k = reaction.k
