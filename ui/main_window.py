@@ -4,7 +4,7 @@ from PyQt6.QtCore import Qt, QSize
 from PyQt6.QtGui import QAction
 
 from ui.palette_panel import PalettePanel
-from ui.flowsheet_canvas import FlowsheetScene, FlowsheetView, BatchReactorItem, CSTRReactorItem
+from ui.flowsheet_canvas import FlowsheetScene, FlowsheetView, BatchReactorItem, CSTRReactorItem, HeaterCoolerItem
 from ui.properties_panel import PropertiesPanel
 from ui.results_panel import ResultsPanel
 from models.batch_reactor import simulate
@@ -148,6 +148,14 @@ class MainWindow(QMainWindow):
     def _on_reactor_selected(self, item: BatchReactorItem):
         self._props.load_reactor(item)
         self._tb_info.setText(f"  Selected: {item.name}")
+        if item._last_results is not None:
+            kind, *data = item._last_results
+            if kind == "reactor":
+                self._results.display(data[0], item.name)
+            elif kind == "heater":
+                self._results.display_heater(data[0], item.name)
+            elif kind == "coupled":
+                self._results.display_coupled(data[0], data[1], item.name)
 
     def _on_reactor_deselected(self):
         self._props.clear()
@@ -155,7 +163,7 @@ class MainWindow(QMainWindow):
 
     def _run_selected(self):
         items = [i for i in self._scene.selectedItems()
-                 if isinstance(i, (BatchReactorItem, CSTRReactorItem))]
+                 if isinstance(i, (BatchReactorItem, CSTRReactorItem, HeaterCoolerItem))]
         if not items:
             self._statusbar.showMessage(
                 "Select a reactor on the flowsheet first, then press Run.", 4000)
@@ -163,6 +171,30 @@ class MainWindow(QMainWindow):
         self._run_reactor(items[0])
 
     def _run_reactor(self, item):
+        # ── Heater/Cooler path ────────────────────────────────────────────
+        if isinstance(item, HeaterCoolerItem):
+            from models.heater import simulate_heater
+            self._statusbar.showMessage(f"Running {item.name}…")
+            try:
+                results = simulate_heater(item.config)
+                if not results["success"]:
+                    self._statusbar.showMessage(
+                        f"Solver warning for {item.name}: {results['message']}", 6000)
+                item._last_results = ("heater", results)
+                self._results.display_heater(results, item.name)
+                T_final = float(results["temperature"][-1])
+                msg = (f"{item.name}  |  T_final = {T_final:.2f} K"
+                       f"  |  T_target = {item.config.T_target:.2f} K"
+                       f"  |  Solver: {results['message']}")
+                self._statusbar.showMessage(msg)
+                self._tb_info.setText(f"  {item.name}  •  T = {T_final:.2f} K")
+            except Exception as exc:
+                QMessageBox.critical(self, "Simulation Error",
+                                     f"Simulation failed for {item.name}:\n\n{exc}")
+                self._statusbar.showMessage(f"Error: {exc}", 6000)
+            return
+
+        # ── Reactor path ──────────────────────────────────────────────────
         from models.reaction import validate
         err = validate(item.reaction)
         if err:
@@ -172,6 +204,67 @@ class MainWindow(QMainWindow):
         self._statusbar.showMessage(f"Running {item.name}…")
         try:
             if isinstance(item, CSTRReactorItem):
+                upstream = self._scene.get_upstream_heater(item)
+                if upstream is not None:
+                    import numpy as np
+                    from models.coupled import simulate_coupled
+                    from models.heater import build_rhs as h_rhs, extract_outputs as h_out
+                    from models.cstr import build_rhs as c_rhs, extract_outputs as c_out
+
+                    h_fn, h_y0 = h_rhs(upstream.config)
+                    c_fn, c_y0 = c_rhs(item.reaction)
+                    units = [
+                        (h_fn, h_y0, h_out),
+                        (c_fn, c_y0, lambda y: c_out(y, item.reaction)),
+                    ]
+                    connections = [(0, "temperature", 1, "temperature")]
+                    t_end = max(upstream.config.t_end, item.reaction.t_end)
+                    n_pts = max(upstream.config.n_points, item.reaction.n_points)
+                    t_eval = np.linspace(0.0, t_end, n_pts)
+                    sol, offsets, sizes = simulate_coupled(
+                        units, connections, (0.0, t_end), t_eval)
+
+                    h_y = sol.y[offsets[0]:offsets[1]]
+                    c_y = sol.y[offsets[1]:offsets[2]]
+                    idx = {s.name: i for i, s in enumerate(item.reaction.species)}
+                    reactants = [s for s in item.reaction.species if s.is_reactant]
+                    ref = reactants[0]
+                    Ca_feed = ref.C_feed
+                    Ca_idx = idx[ref.name]
+                    conversion = (1.0 - c_y[Ca_idx] / Ca_feed) if Ca_feed > 0 else np.zeros_like(sol.t)
+
+                    heater_results = {
+                        "t": sol.t,
+                        "temperature": h_y[0],
+                        "approach": (h_y[0] - upstream.config.T0) / (upstream.config.T_target - upstream.config.T0) * 100
+                        if abs(upstream.config.T_target - upstream.config.T0) > 1e-9
+                        else np.full_like(sol.t, 100.0),
+                        "success": sol.success,
+                        "message": sol.message,
+                    }
+                    cstr_results = {
+                        "t": sol.t,
+                        "concentrations": {s.name: c_y[idx[s.name]] for s in item.reaction.species},
+                        "conversion": conversion,
+                        "success": sol.success,
+                        "message": sol.message,
+                    }
+
+                    if not sol.success:
+                        self._statusbar.showMessage(
+                            f"Solver warning for {item.name}: {sol.message}", 6000)
+
+                    item._last_results = ("coupled", heater_results, cstr_results)
+                    self._results.display_coupled(heater_results, cstr_results, item.name)
+                    X_final = float(conversion[-1]) * 100
+                    ref_name = ref.name
+                    msg = (f"{item.name} (coupled)  |  X{ref_name} = {X_final:.2f}%"
+                           f"  |  T_final = {float(h_y[0, -1]):.2f} K"
+                           f"  |  Solver: {sol.message}")
+                    self._statusbar.showMessage(msg)
+                    self._tb_info.setText(f"  {item.name}  •  X{ref_name} = {X_final:.2f}%")
+                    return
+
                 results = simulate_cstr(item.reaction)
                 result_label = "Steady-state conversion"
             else:
@@ -182,6 +275,7 @@ class MainWindow(QMainWindow):
                 self._statusbar.showMessage(
                     f"Solver warning for {item.name}: {results['message']}", 6000)
 
+            item._last_results = ("reactor", results)
             self._results.display(results, item.name)
 
             reactants = [s for s in item.reaction.species if s.is_reactant]
@@ -226,7 +320,8 @@ class MainWindow(QMainWindow):
         QMessageBox.about(
             self, "About Reaktor",
             "<h3>Reaktor v1.0</h3>"
-            "<p>A batch reactor process simulator inspired by Aspen PLUS.</p>"
-            "<p>Define any reaction with custom stoichiometry and optional "
-            "Arrhenius kinetics. ODEs are solved with SciPy's RK45.</p>"
+            "<p>A desktop simulator for chemical unit operations.</p>"
+            "<p>Define reactions with custom stoichiometry and Arrhenius kinetics. "
+            "Connect units on a flowsheet for coupled dynamic simulation. "
+            "ODEs are solved with SciPy's RK45.</p>"
             "<p><b>Built with:</b> Python · PyQt6 · NumPy · SciPy · Matplotlib</p>")
