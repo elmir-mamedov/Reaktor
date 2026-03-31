@@ -120,6 +120,7 @@ class ResultsPanel(QWidget):
 
         self._conc_canvas = _Canvas()
         self._conv_canvas = _Canvas()
+        self._extra_canvas = _Canvas()
         self._table = QTableWidget()
         self._table.setAlternatingRowColors(True)
         self._table.horizontalHeader().setSectionResizeMode(
@@ -128,25 +129,29 @@ class ResultsPanel(QWidget):
 
         self._tabs.addTab(self._conc_canvas, "Concentrations")
         self._tabs.addTab(self._conv_canvas, "Conversion")
+        self._tabs.addTab(self._extra_canvas, "")
         self._tabs.addTab(self._table, "Data Table")
+        self._tabs.setTabVisible(2, False)
 
     def display(self, results: dict, reactor_name: str = ""):
+        self._tabs.setTabVisible(2, False)
         self._conc_canvas.plot_concentrations(results)
         self._conv_canvas.plot_conversion(results)
         self._populate_table(results)
         suffix = f" — {reactor_name}" if reactor_name else ""
         self._tabs.setTabText(0, f"Concentrations{suffix}")
         self._tabs.setTabText(1, f"Conversion{suffix}")
-        self._tabs.setTabText(2, "Data Table")
+        self._tabs.setTabText(3, "Data Table")
 
     def display_heater(self, results: dict, reactor_name: str = ""):
+        self._tabs.setTabVisible(2, False)
         self._conc_canvas.plot_temperature(results)
         self._conv_canvas.plot_approach(results)
         self._populate_heater_table(results)
         suffix = f" — {reactor_name}" if reactor_name else ""
         self._tabs.setTabText(0, f"Temperature{suffix}")
         self._tabs.setTabText(1, f"Approach{suffix}")
-        self._tabs.setTabText(2, "Data Table")
+        self._tabs.setTabText(3, "Data Table")
 
     def _populate_table(self, results: dict):
         t = results["t"]
@@ -195,13 +200,16 @@ class ResultsPanel(QWidget):
             self._table.setItem(row, 2, QTableWidgetItem(f"{A[idx]:.2f}"))
 
     def display_coupled(self, heater_results: dict, cstr_results: dict, name: str = ""):
+        self._tabs.setTabVisible(2, True)
         self._conc_canvas.plot_temperature(heater_results)
         self._conv_canvas.plot_concentrations(cstr_results)
+        self._extra_canvas.plot_conversion(cstr_results)
         self._populate_coupled_table(heater_results, cstr_results)
         suffix = f" — {name}" if name else ""
         self._tabs.setTabText(0, f"Temperature{suffix}")
         self._tabs.setTabText(1, f"Concentrations{suffix}")
-        self._tabs.setTabText(2, "Data Table")
+        self._tabs.setTabText(2, f"Conversion{suffix}")
+        self._tabs.setTabText(3, "Data Table")
 
     def _populate_coupled_table(self, heater_results: dict, cstr_results: dict):
         t = cstr_results["t"]
