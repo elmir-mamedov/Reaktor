@@ -309,7 +309,8 @@ class MainWindow(QMainWindow):
         QMessageBox.about(
             self, "About Reaktor",
             "<h3>Reaktor v1.0</h3>"
-            "<p>A batch reactor process simulator inspired by Aspen PLUS.</p>"
-            "<p>Define any reaction with custom stoichiometry and optional "
-            "Arrhenius kinetics. ODEs are solved with SciPy's RK45.</p>"
+            "<p>A desktop simulator for chemical unit operations.</p>"
+            "<p>Define reactions with custom stoichiometry and Arrhenius kinetics. "
+            "Connect units on a flowsheet for coupled dynamic simulation. "
+            "ODEs are solved with SciPy's RK45.</p>"
             "<p><b>Built with:</b> Python · PyQt6 · NumPy · SciPy · Matplotlib</p>")
