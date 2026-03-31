@@ -146,7 +146,8 @@ class MainWindow(QMainWindow):
     # ── slots ─────────────────────────────────────────────────────────────
 
     def _on_reactor_selected(self, item: BatchReactorItem):
-        self._props.load_reactor(item)
+        upstream = self._scene.get_upstream_heater(item) if isinstance(item, CSTRReactorItem) else None
+        self._props.load_reactor(item, upstream_heater=upstream)
         self._tb_info.setText(f"  Selected: {item.name}")
         if item._last_results is not None:
             kind, *data = item._last_results
