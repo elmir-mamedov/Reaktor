@@ -86,19 +86,19 @@ class PropertiesPanel(QWidget):
         layout.addWidget(gen_grp)
 
         # — Reaction template —
-        rxn_grp = QGroupBox("Reaction")
-        rxn_form = QFormLayout(rxn_grp)
+        self._rxn_grp = QGroupBox("Reaction")
+        rxn_form = QFormLayout(self._rxn_grp)
         rxn_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
         self._template_combo = QComboBox()
         for name in TEMPLATES:
             self._template_combo.addItem(name)
         self._template_combo.currentTextChanged.connect(self._on_template_changed)
         rxn_form.addRow("Template:", self._template_combo)
-        layout.addWidget(rxn_grp)
+        layout.addWidget(self._rxn_grp)
 
         # — Kinetics —
-        kin_grp = QGroupBox("Kinetics")
-        kin_form = QFormLayout(kin_grp)
+        self._kin_grp = QGroupBox("Kinetics")
+        kin_form = QFormLayout(self._kin_grp)
         kin_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
 
         self._arrh_check = QCheckBox("Use Arrhenius equation")
@@ -128,7 +128,7 @@ class PropertiesPanel(QWidget):
         kin_form.addRow(self._T_lbl, self._T_spin)
         self._T_spin.valueChanged.connect(self._update)
 
-        layout.addWidget(kin_grp)
+        layout.addWidget(self._kin_grp)
 
         # — Species table —
         self._species_grp = QGroupBox("Species")
@@ -179,8 +179,8 @@ class PropertiesPanel(QWidget):
         layout.addWidget(self._cstr_grp)
 
         # — Simulation settings —
-        sim_grp = QGroupBox("Simulation Settings")
-        sim_form = QFormLayout(sim_grp)
+        self._sim_grp = QGroupBox("Simulation Settings")
+        sim_form = QFormLayout(self._sim_grp)
         sim_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
 
         self._tend_spin = self._dspin(0.1, 1e6, 100.0, 1)
@@ -195,7 +195,33 @@ class PropertiesPanel(QWidget):
         sim_form.addRow("Points:", self._npts_spin)
         self._npts_spin.valueChanged.connect(self._update)
 
-        layout.addWidget(sim_grp)
+        layout.addWidget(self._sim_grp)
+
+        # — Heater / Cooler Settings —
+        self._heater_grp = QGroupBox("Heater / Cooler")
+        h_form = QFormLayout(self._heater_grp)
+        h_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+
+        self._h_T0_spin = self._dspin(1.0, 5000.0, 298.15, 2)
+        h_form.addRow("T\u2080 (K):", self._h_T0_spin)
+        self._h_T0_spin.valueChanged.connect(self._update_heater)
+
+        self._h_Ttarget_spin = self._dspin(1.0, 5000.0, 350.0, 2)
+        h_form.addRow("T_target (K):", self._h_Ttarget_spin)
+        self._h_Ttarget_spin.valueChanged.connect(self._update_heater)
+
+        self._h_tau_spin = self._dspin(0.1, 1e6, 60.0, 1)
+        self._h_tau_spin.setStepType(QDoubleSpinBox.StepType.AdaptiveDecimalStepType)
+        h_form.addRow("\u03c4 (s):", self._h_tau_spin)
+        self._h_tau_spin.valueChanged.connect(self._update_heater)
+
+        self._h_tend_spin = self._dspin(0.1, 1e6, 300.0, 1)
+        self._h_tend_spin.setStepType(QDoubleSpinBox.StepType.AdaptiveDecimalStepType)
+        h_form.addRow("End time (s):", self._h_tend_spin)
+        self._h_tend_spin.valueChanged.connect(self._update_heater)
+
+        self._heater_grp.setVisible(False)
+        layout.addWidget(self._heater_grp)
 
         # Run button
         self._run_btn = QPushButton("▶  Run Simulation")
@@ -211,34 +237,49 @@ class PropertiesPanel(QWidget):
     # ── public slots ──────────────────────────────────────────────────────
 
     def load_reactor(self, item):
-        """Populate the panel from a BatchReactorItem or CSTRReactorItem."""
+        """Populate the panel from any flowsheet item (reactor or heater)."""
+        from ui.flowsheet_canvas import HeaterCoolerItem
         self._loading = True
         self._item = item
-        r: CustomReaction = item.reaction
-        is_cstr = r.reactor_type == "cstr"
 
         self._placeholder.setVisible(False)
         self._form_widget.setVisible(True)
-
         self._name_edit.setText(item.name)
-        self._reactor_type_lbl.setText("CSTR" if is_cstr else "Batch Reactor")
 
-        self._arrh_check.setChecked(r.use_arrhenius)
-        self._k_spin.setValue(r.k)
-        self._A_spin.setValue(r.A_factor)
-        self._Ea_spin.setValue(r.Ea)
-        self._T_spin.setValue(r.T)
-        self._tend_spin.setValue(r.t_end)
-        self._npts_spin.setValue(r.n_points)
-        self._set_arrhenius_visible(r.use_arrhenius)
+        is_heater = isinstance(item, HeaterCoolerItem)
 
-        # CSTR-specific fields
-        self._cstr_grp.setVisible(is_cstr)
-        self._species_table.setColumnHidden(4, not is_cstr)
-        if is_cstr:
-            self._tau_spin.setValue(r.tau)
+        # Show/hide groups based on item type
+        self._rxn_grp.setVisible(not is_heater)
+        self._kin_grp.setVisible(not is_heater)
+        self._species_grp.setVisible(not is_heater)
+        self._sim_grp.setVisible(not is_heater)
+        self._heater_grp.setVisible(is_heater)
 
-        self._load_species(r)
+        if is_heater:
+            self._reactor_type_lbl.setText("Heater / Cooler")
+            self._cstr_grp.setVisible(False)
+            cfg = item.config
+            self._h_T0_spin.setValue(cfg.T0)
+            self._h_Ttarget_spin.setValue(cfg.T_target)
+            self._h_tau_spin.setValue(cfg.tau)
+            self._h_tend_spin.setValue(cfg.t_end)
+        else:
+            r: CustomReaction = item.reaction
+            is_cstr = r.reactor_type == "cstr"
+            self._reactor_type_lbl.setText("CSTR" if is_cstr else "Batch Reactor")
+            self._arrh_check.setChecked(r.use_arrhenius)
+            self._k_spin.setValue(r.k)
+            self._A_spin.setValue(r.A_factor)
+            self._Ea_spin.setValue(r.Ea)
+            self._T_spin.setValue(r.T)
+            self._tend_spin.setValue(r.t_end)
+            self._npts_spin.setValue(r.n_points)
+            self._set_arrhenius_visible(r.use_arrhenius)
+            self._cstr_grp.setVisible(is_cstr)
+            self._species_table.setColumnHidden(4, not is_cstr)
+            if is_cstr:
+                self._tau_spin.setValue(r.tau)
+            self._load_species(r)
 
         self._loading = False
 
@@ -283,6 +324,19 @@ class PropertiesPanel(QWidget):
         if self._loading:
             return
         self._read_species_table()
+
+    def _update_heater(self):
+        if self._item is None or self._loading:
+            return
+        from ui.flowsheet_canvas import HeaterCoolerItem
+        if not isinstance(self._item, HeaterCoolerItem):
+            return
+        cfg = self._item.config
+        cfg.T0 = self._h_T0_spin.value()
+        cfg.T_target = self._h_Ttarget_spin.value()
+        cfg.tau = self._h_tau_spin.value()
+        cfg.t_end = self._h_tend_spin.value()
+        self._item.update()
 
     def _update(self):
         if self._item is None or self._loading:
@@ -394,7 +448,8 @@ class PropertiesPanel(QWidget):
         self._item.update()
 
     def _update_reaction_preview(self):
-        if self._item:
+        from ui.flowsheet_canvas import HeaterCoolerItem
+        if self._item and not isinstance(self._item, HeaterCoolerItem):
             self._reaction_preview.setText(self._item.reaction.reaction_label())
 
     # ── helpers ───────────────────────────────────────────────────────────

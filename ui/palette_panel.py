@@ -159,6 +159,64 @@ class CSTREquipmentTile(EquipmentTile):
         painter.drawLine(cx - blen, mid + 4, cx + blen, mid + 4)
 
 
+class HeaterCoolerTile(EquipmentTile):
+    """Palette tile for dragging a Heater/Cooler onto the flowsheet."""
+
+    def _draw_reactor_icon(self, painter: QPainter, cx: int, cy: int, w: int, h: int):
+        # Body rectangle (flatter than reactor)
+        bh = h // 2
+        painter.setPen(QPen(QColor("#d35400"), 1.5))
+        painter.setBrush(QBrush(QColor("#fad7a0")))
+        painter.drawRect(cx - w // 2, cy - bh // 2, w, bh)
+
+        # Inlet pipe (left)
+        painter.setPen(QPen(QColor("#d35400"), 1.5))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawLine(cx - w // 2 - 10, cy, cx - w // 2, cy)
+        from PyQt6.QtGui import QPolygonF
+        from PyQt6.QtCore import QPointF as _QPointF
+        tip_in = _QPointF(cx - w // 2 + 1, cy)
+        poly_in = QPolygonF([tip_in,
+                             _QPointF(cx - w // 2 - 5, cy - 3),
+                             _QPointF(cx - w // 2 - 5, cy + 3)])
+        painter.setBrush(QBrush(QColor("#d35400")))
+        painter.setPen(QPen(QColor("#d35400"), 0))
+        painter.drawPolygon(poly_in)
+
+        # Outlet pipe (right)
+        painter.setPen(QPen(QColor("#d35400"), 1.5))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawLine(cx + w // 2, cy, cx + w // 2 + 10, cy)
+        tip_out = _QPointF(cx + w // 2 + 10, cy)
+        poly_out = QPolygonF([tip_out,
+                              _QPointF(cx + w // 2 + 5, cy - 3),
+                              _QPointF(cx + w // 2 + 5, cy + 3)])
+        painter.setBrush(QBrush(QColor("#d35400")))
+        painter.setPen(QPen(QColor("#d35400"), 0))
+        painter.drawPolygon(poly_out)
+
+        # Wavy lines inside
+        painter.setPen(QPen(QColor("#d35400"), 1.2))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        inner_w = w - 8
+        x0 = cx - inner_w // 2
+        amp = bh // 6
+        seg = inner_w / 6
+        for wy in (cy - bh // 6, cy + bh // 6):
+            from PyQt6.QtGui import QPainterPath
+            from PyQt6.QtCore import QPointF as _P
+            path = QPainterPath()
+            path.moveTo(x0, wy)
+            for i in range(6):
+                sign = 1 if i % 2 == 0 else -1
+                path.cubicTo(
+                    x0 + i * seg + seg * 0.4, wy + sign * amp,
+                    x0 + i * seg + seg * 0.6, wy + sign * amp,
+                    x0 + (i + 1) * seg,       wy,
+                )
+            painter.drawPath(path)
+
+
 class PalettePanel(QWidget):
     """Equipment palette dock contents."""
 
@@ -192,6 +250,18 @@ class PalettePanel(QWidget):
 
         cstr_tile = CSTREquipmentTile("CSTR", "cstr_reactor")
         layout.addWidget(cstr_tile, alignment=Qt.AlignmentFlag.AlignHCenter)
+
+        sep2 = QFrame()
+        sep2.setFrameShape(QFrame.Shape.HLine)
+        sep2.setStyleSheet("color: #bdc3c7;")
+        layout.addWidget(sep2)
+
+        cat2 = QLabel("Heat Transfer")
+        cat2.setStyleSheet("color: #784212; font-size: 11px; font-weight: bold;")
+        layout.addWidget(cat2)
+
+        heater_tile = HeaterCoolerTile("Heater/Cooler", "heater_cooler")
+        layout.addWidget(heater_tile, alignment=Qt.AlignmentFlag.AlignHCenter)
 
         tip = QLabel("Drag onto the\nflowsheet to add")
         tip.setStyleSheet("color: #95a5a6; font-size: 10px;")

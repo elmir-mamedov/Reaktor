@@ -4,7 +4,7 @@ from PyQt6.QtCore import Qt, QSize
 from PyQt6.QtGui import QAction
 
 from ui.palette_panel import PalettePanel
-from ui.flowsheet_canvas import FlowsheetScene, FlowsheetView, BatchReactorItem, CSTRReactorItem
+from ui.flowsheet_canvas import FlowsheetScene, FlowsheetView, BatchReactorItem, CSTRReactorItem, HeaterCoolerItem
 from ui.properties_panel import PropertiesPanel
 from ui.results_panel import ResultsPanel
 from models.batch_reactor import simulate
@@ -155,7 +155,7 @@ class MainWindow(QMainWindow):
 
     def _run_selected(self):
         items = [i for i in self._scene.selectedItems()
-                 if isinstance(i, (BatchReactorItem, CSTRReactorItem))]
+                 if isinstance(i, (BatchReactorItem, CSTRReactorItem, HeaterCoolerItem))]
         if not items:
             self._statusbar.showMessage(
                 "Select a reactor on the flowsheet first, then press Run.", 4000)
@@ -163,6 +163,29 @@ class MainWindow(QMainWindow):
         self._run_reactor(items[0])
 
     def _run_reactor(self, item):
+        # ── Heater/Cooler path ────────────────────────────────────────────
+        if isinstance(item, HeaterCoolerItem):
+            from models.heater import simulate_heater
+            self._statusbar.showMessage(f"Running {item.name}…")
+            try:
+                results = simulate_heater(item.config)
+                if not results["success"]:
+                    self._statusbar.showMessage(
+                        f"Solver warning for {item.name}: {results['message']}", 6000)
+                self._results.display_heater(results, item.name)
+                T_final = float(results["temperature"][-1])
+                msg = (f"{item.name}  |  T_final = {T_final:.2f} K"
+                       f"  |  T_target = {item.config.T_target:.2f} K"
+                       f"  |  Solver: {results['message']}")
+                self._statusbar.showMessage(msg)
+                self._tb_info.setText(f"  {item.name}  •  T = {T_final:.2f} K")
+            except Exception as exc:
+                QMessageBox.critical(self, "Simulation Error",
+                                     f"Simulation failed for {item.name}:\n\n{exc}")
+                self._statusbar.showMessage(f"Error: {exc}", 6000)
+            return
+
+        # ── Reactor path ──────────────────────────────────────────────────
         from models.reaction import validate
         err = validate(item.reaction)
         if err:

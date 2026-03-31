@@ -5,10 +5,11 @@ from PyQt6.QtWidgets import (QGraphicsScene, QGraphicsView, QGraphicsItem,
                               QMenu)
 from PyQt6.QtCore import Qt, QRectF, QPointF, pyqtSignal
 from PyQt6.QtGui import (QPainter, QPen, QBrush, QColor, QFont,
-                          QTransform, QAction)
+                          QTransform, QAction, QPainterPath)
 
 from PyQt6.QtGui import QPolygonF
 from models.reaction import CustomReaction, default_reaction, default_cstr_reaction
+from models.heater import HeaterConfig
 
 # ── Batch reactor geometry ────────────────────────────────────────────────────
 _W = 64       # vessel body width
@@ -19,6 +20,10 @@ _EH = 20      # ellipse height at top and bottom
 _CW = 72      # CSTR vessel width
 _CH = 78      # CSTR vessel height
 _CEH = 18     # CSTR ellipse height
+
+# ── Heater/Cooler geometry ────────────────────────────────────────────────────
+_HW = 90      # heater body width
+_HH = 46      # heater body height
 
 
 class BatchReactorItem(QGraphicsItem):
@@ -271,6 +276,129 @@ class CSTRReactorItem(QGraphicsItem):
             Qt.AlignmentFlag.AlignCenter, rstr)
 
 
+def _draw_wave_line(painter: QPainter, x0: float, y0: float,
+                    width: float, amplitude: float, n_waves: int):
+    """Draw a horizontal sine-like wave using cubic bezier segments."""
+    path = QPainterPath()
+    path.moveTo(x0, y0)
+    seg = width / (n_waves * 2)
+    for i in range(n_waves * 2):
+        sign = 1 if i % 2 == 0 else -1
+        path.cubicTo(
+            x0 + i * seg + seg * 0.4, y0 + sign * amplitude,
+            x0 + i * seg + seg * 0.6, y0 + sign * amplitude,
+            x0 + (i + 1) * seg,       y0,
+        )
+    painter.drawPath(path)
+
+
+class HeaterCoolerItem(QGraphicsItem):
+    """PFD symbol for a Heater/Cooler block."""
+
+    MIME_KEY = "heater_cooler"
+
+    def __init__(self, name: str = "H-100", scene=None):
+        super().__init__()
+        self.name = name
+        self.config = HeaterConfig()
+        self._scene_ref = scene
+        self._hovered = False
+
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges, True)
+        self.setAcceptHoverEvents(True)
+
+    def boundingRect(self) -> QRectF:
+        return QRectF(-_HW / 2 - 30, -_HH / 2 - 8, _HW + 60, _HH + 36)
+
+    def hoverEnterEvent(self, event):
+        self._hovered = True
+        self.update()
+
+    def hoverLeaveEvent(self, event):
+        self._hovered = False
+        self.update()
+
+    def itemChange(self, change, value):
+        if change == QGraphicsItem.GraphicsItemChange.ItemSelectedHasChanged:
+            if self._scene_ref is not None:
+                if value:
+                    self._scene_ref._notify_selected(self)
+                else:
+                    if not self._scene_ref.selectedItems():
+                        self._scene_ref._notify_deselected()
+        return super().itemChange(change, value)
+
+    def paint(self, painter: QPainter, option, widget):
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        selected = self.isSelected()
+        hovered = self._hovered
+
+        if selected:
+            body_fill = QColor("#f0b27a")
+            border = QColor("#a04000")
+            bw = 2.5
+        elif hovered:
+            body_fill = QColor("#fad7a0")
+            border = QColor("#d35400")
+            bw = 2.0
+        else:
+            body_fill = QColor("#fdebd0")
+            border = QColor("#e67e22")
+            bw = 1.5
+
+        pen = QPen(border, bw)
+        w, h = _HW, _HH
+
+        # Body rectangle
+        painter.setPen(pen)
+        painter.setBrush(QBrush(body_fill))
+        painter.drawRect(QRectF(-w / 2, -h / 2, w, h))
+
+        # Inlet pipe (left)
+        painter.setPen(QPen(border, bw))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawLine(QPointF(-w / 2 - 22, 0), QPointF(-w / 2, 0))
+        _draw_arrowhead(painter, -w / 2 + 1, 0, 6, border)
+
+        # Outlet pipe (right)
+        painter.setPen(QPen(border, bw))
+        painter.drawLine(QPointF(w / 2, 0), QPointF(w / 2 + 22, 0))
+        _draw_arrowhead(painter, w / 2 + 22, 0, 6, border)
+
+        # Wavy heat-exchange lines inside body
+        painter.setPen(QPen(border, 1.5))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        inner_w = w - 16
+        x0 = -inner_w / 2
+        for wave_y in (-h / 5, h / 5):
+            _draw_wave_line(painter, x0, wave_y, inner_w, h / 9, 3)
+
+        # Selection highlight
+        if selected:
+            sel_pen = QPen(QColor("#e67e22"), 1.2, Qt.PenStyle.DashLine)
+            painter.setPen(sel_pen)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawRect(self.boundingRect().adjusted(3, 3, -3, -3))
+
+        # Name label below
+        painter.setPen(QPen(QColor("#784212")))
+        painter.setFont(QFont("", 9, QFont.Weight.Bold))
+        painter.drawText(
+            QRectF(-w / 2, h / 2 + 4, w, 18),
+            Qt.AlignmentFlag.AlignCenter, self.name)
+
+        # Temperature target hint inside
+        painter.setFont(QFont("", 7))
+        painter.setPen(QPen(QColor("#784212")))
+        hint = f"\u2192 {self.config.T_target:.1f} K"
+        painter.drawText(
+            QRectF(-w / 2, -h / 2 + 3, w, 14),
+            Qt.AlignmentFlag.AlignCenter, hint)
+
+
 # ── Scene ─────────────────────────────────────────────────────────────────────
 
 class FlowsheetScene(QGraphicsScene):
@@ -300,6 +428,14 @@ class FlowsheetScene(QGraphicsScene):
         self.addItem(item)
         return item
 
+    def add_heater(self, pos: QPointF) -> HeaterCoolerItem:
+        self._counter += 1
+        name = f"H-{100 + self._counter - 1}"
+        item = HeaterCoolerItem(name, scene=self)
+        item.setPos(pos)
+        self.addItem(item)
+        return item
+
     # ── called by BatchReactorItem.itemChange ─────────────────────────────
 
     def _notify_selected(self, item: BatchReactorItem):
@@ -317,8 +453,10 @@ class FlowsheetScene(QGraphicsScene):
         if item is None:
             add_batch_act = QAction("Add Batch Reactor Here")
             add_cstr_act = QAction("Add CSTR Here")
+            add_heater_act = QAction("Add Heater/Cooler Here")
             menu.addAction(add_batch_act)
             menu.addAction(add_cstr_act)
+            menu.addAction(add_heater_act)
             chosen = menu.exec(event.screenPos())
             if chosen == add_batch_act:
                 reactor = self.add_reactor(event.scenePos())
@@ -328,7 +466,11 @@ class FlowsheetScene(QGraphicsScene):
                 reactor = self.add_cstr(event.scenePos())
                 self.clearSelection()
                 reactor.setSelected(True)
-        elif isinstance(item, (BatchReactorItem, CSTRReactorItem)):
+            elif chosen == add_heater_act:
+                reactor = self.add_heater(event.scenePos())
+                self.clearSelection()
+                reactor.setSelected(True)
+        elif isinstance(item, (BatchReactorItem, CSTRReactorItem, HeaterCoolerItem)):
             del_act = QAction(f"Delete  {item.name}")
             menu.addAction(del_act)
             chosen = menu.exec(event.screenPos())
@@ -448,6 +590,8 @@ class FlowsheetView(QGraphicsView):
                     reactor = sc.add_reactor(pos)
                 elif mime == CSTRReactorItem.MIME_KEY:
                     reactor = sc.add_cstr(pos)
+                elif mime == HeaterCoolerItem.MIME_KEY:
+                    reactor = sc.add_heater(pos)
                 else:
                     return
                 sc.clearSelection()
