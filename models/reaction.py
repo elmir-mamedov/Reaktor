@@ -21,7 +21,9 @@ class CustomReaction:
     t_end: float = 100.0
     n_points: int = 500
     reactor_type: str = "batch"   # "batch" or "cstr"
-    tau: float = 60.0             # CSTR residence time (s)
+    tau: float = 60.0             # CSTR residence time (s) — kept in sync with V/Q
+    Q: float = 1.0                # Volumetric flow rate (L/s)
+    V: float = 60.0               # Reactor volume (L)
     R: float = field(default=8.314, init=False, repr=False)
 
     def effective_k(self) -> float:

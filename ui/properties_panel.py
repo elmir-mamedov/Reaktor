@@ -172,10 +172,19 @@ class PropertiesPanel(QWidget):
         self._cstr_grp = QGroupBox("CSTR Settings")
         cstr_form = QFormLayout(self._cstr_grp)
         cstr_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
-        self._tau_spin = self._dspin(0.1, 1e6, 60.0, 1)
-        self._tau_spin.setStepType(QDoubleSpinBox.StepType.AdaptiveDecimalStepType)
-        cstr_form.addRow("Residence time τ (s):", self._tau_spin)
-        self._tau_spin.valueChanged.connect(self._update)
+        self._Q_spin = self._dspin(1e-6, 1e6, 1.0, 4)
+        self._Q_spin.setStepType(QDoubleSpinBox.StepType.AdaptiveDecimalStepType)
+        cstr_form.addRow("Flow rate Q (L/s):", self._Q_spin)
+        self._Q_spin.valueChanged.connect(self._update)
+
+        self._V_spin = self._dspin(1e-3, 1e8, 60.0, 2)
+        self._V_spin.setStepType(QDoubleSpinBox.StepType.AdaptiveDecimalStepType)
+        cstr_form.addRow("Volume V (L):", self._V_spin)
+        self._V_spin.valueChanged.connect(self._update)
+
+        self._tau_display = QLabel("60.00 s")
+        self._tau_display.setStyleSheet("color: #5d6d7e; font-size: 10px;")
+        cstr_form.addRow("τ = V/Q (s):", self._tau_display)
         self._cstr_grp.setVisible(False)
         layout.addWidget(self._cstr_grp)
 
@@ -280,7 +289,9 @@ class PropertiesPanel(QWidget):
             self._cstr_grp.setVisible(is_cstr)
             self._species_table.setColumnHidden(4, not is_cstr)
             if is_cstr:
-                self._tau_spin.setValue(r.tau)
+                self._Q_spin.setValue(r.Q)
+                self._V_spin.setValue(r.V)
+                self._tau_display.setText(f"{r.V / r.Q:.2f} s")
             self._load_species(r)
             self._apply_heater_lock()
 
@@ -354,7 +365,10 @@ class PropertiesPanel(QWidget):
         r.t_end = self._tend_spin.value()
         r.n_points = self._npts_spin.value()
         if r.reactor_type == "cstr":
-            r.tau = self._tau_spin.value()
+            r.Q = self._Q_spin.value()
+            r.V = self._V_spin.value()
+            r.tau = r.V / r.Q
+            self._tau_display.setText(f"{r.tau:.2f} s")
         self._item.update()
 
     # ── species table helpers ─────────────────────────────────────────────
