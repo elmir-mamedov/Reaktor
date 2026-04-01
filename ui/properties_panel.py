@@ -367,8 +367,9 @@ class PropertiesPanel(QWidget):
         if r.reactor_type == "cstr":
             r.Q = self._Q_spin.value()
             r.V = self._V_spin.value()
-            r.tau = r.V / r.Q
-            self._tau_display.setText(f"{r.tau:.2f} s")
+            if r.Q > 0:
+                r.tau = r.V / r.Q
+                self._tau_display.setText(f"{r.tau:.2f} s")
         self._item.update()
 
     # ── species table helpers ─────────────────────────────────────────────
