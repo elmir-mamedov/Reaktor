@@ -4,7 +4,9 @@ from PyQt6.QtCore import Qt, QSize
 from PyQt6.QtGui import QAction
 
 from ui.palette_panel import PalettePanel
-from ui.flowsheet_canvas import FlowsheetScene, FlowsheetView, BatchReactorItem, CSTRReactorItem, HeaterCoolerItem
+from ui.flowsheet_canvas import (FlowsheetScene, FlowsheetView,
+                                  BatchReactorItem, CSTRReactorItem,
+                                  HeaterCoolerItem, FlashSeparatorItem)
 from ui.properties_panel import PropertiesPanel
 from ui.results_panel import ResultsPanel
 from models.batch_reactor import simulate
@@ -157,6 +159,8 @@ class MainWindow(QMainWindow):
                 self._results.display_heater(data[0], item.name)
             elif kind == "coupled":
                 self._results.display_coupled(data[0], data[1], item.name)
+            elif kind == "flash":
+                self._results.display_flash(data[0], item.name)
 
     def _on_reactor_deselected(self):
         self._props.clear()
@@ -169,17 +173,20 @@ class MainWindow(QMainWindow):
         """Run every block on the canvas. Heaters that feed a CSTR are skipped
         (they are re-run automatically as part of the coupled simulation)."""
         all_items = [i for i in self._scene.items()
-                     if isinstance(i, (BatchReactorItem, CSTRReactorItem, HeaterCoolerItem))]
+                     if isinstance(i, (BatchReactorItem, CSTRReactorItem,
+                                       HeaterCoolerItem, FlashSeparatorItem))]
         if not all_items:
             self._statusbar.showMessage("No blocks on the canvas to run.", 4000)
             return
 
-        connected_heaters = {s.source for s in self._scene._streams}
+        connected_heaters = {s.source for s in self._scene._streams
+                             if isinstance(s.source, HeaterCoolerItem)}
 
         ordered = (
             [i for i in all_items if isinstance(i, HeaterCoolerItem) and i not in connected_heaters] +
             [i for i in all_items if isinstance(i, BatchReactorItem)] +
-            [i for i in all_items if isinstance(i, CSTRReactorItem)]
+            [i for i in all_items if isinstance(i, CSTRReactorItem)] +
+            [i for i in all_items if isinstance(i, FlashSeparatorItem)]
         )
 
         for item in ordered:
@@ -189,6 +196,40 @@ class MainWindow(QMainWindow):
             f"All {len(ordered)} block(s) simulated.", 5000)
 
     def _run_reactor(self, item):
+        # ── Flash Separator path ──────────────────────────────────────────
+        if isinstance(item, FlashSeparatorItem):
+            from models.flash import simulate_flash
+            upstream_cstr = self._scene.get_upstream_cstr(item)
+            if upstream_cstr is None:
+                QMessageBox.warning(self, "No Feed",
+                                    f"{item.name} has no upstream CSTR connected.")
+                return
+            self._statusbar.showMessage(f"Running {item.name}…")
+            try:
+                cstr_results = simulate_cstr(upstream_cstr.reaction)
+                flash_results = simulate_flash(
+                    item.config,
+                    cstr_results["concentrations"],
+                    cstr_results["t"],
+                    feed_Q=upstream_cstr.reaction.Q,
+                )
+                if not flash_results["success"]:
+                    self._statusbar.showMessage(
+                        f"Flash warning for {item.name}: {flash_results['message']}", 6000)
+                item._last_results = ("flash", flash_results)
+                upstream_cstr._last_results = ("reactor", cstr_results)
+                self._results.display_flash(flash_results, item.name)
+                psi_final = float(flash_results["psi"][-1])
+                self._statusbar.showMessage(
+                    f"{item.name}  |  ψ_final = {psi_final:.4f}"
+                    f"  |  T = {item.config.T:.1f} K  |  P = {item.config.P:.3f} bar")
+                self._tb_info.setText(f"  {item.name}  •  ψ = {psi_final:.3f}")
+            except Exception as exc:
+                QMessageBox.critical(self, "Simulation Error",
+                                     f"Simulation failed for {item.name}:\n\n{exc}")
+                self._statusbar.showMessage(f"Error: {exc}", 6000)
+            return
+
         # ── Heater/Cooler path ────────────────────────────────────────────
         if isinstance(item, HeaterCoolerItem):
             from models.heater import simulate_heater

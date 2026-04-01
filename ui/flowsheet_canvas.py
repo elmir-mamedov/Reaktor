@@ -11,6 +11,7 @@ from PyQt6.QtGui import (QPainter, QPen, QBrush, QColor, QFont,
 from PyQt6.QtGui import QPolygonF
 from models.reaction import CustomReaction, default_reaction, default_cstr_reaction
 from models.heater import HeaterConfig
+from models.flash import FlashConfig
 
 # ── Batch reactor geometry ────────────────────────────────────────────────────
 _W = 64       # vessel body width
@@ -25,6 +26,10 @@ _CEH = 18     # CSTR ellipse height
 # ── Heater/Cooler geometry ────────────────────────────────────────────────────
 _HW = 90      # heater body width
 _HH = 46      # heater body height
+
+# ── Flash Separator geometry ──────────────────────────────────────────────────
+_FW = 70      # flash body width
+_FH = 90      # flash body height
 
 _PORT_RADIUS = 12   # px — how close cursor must be to snap to a port
 
@@ -200,6 +205,10 @@ class CSTRReactorItem(QGraphicsItem):
         """Input port positions in scene coordinates."""
         return [self.mapToScene(QPointF(-_CW / 2 - 22, -_CH / 4))]
 
+    def output_scene_ports(self) -> list[QPointF]:
+        """Output port positions in scene coordinates."""
+        return [self.mapToScene(QPointF(_CW / 2 + 22, _CH / 4))]
+
     def hoverEnterEvent(self, event):
         self._hovered = True
         self.update()
@@ -291,12 +300,12 @@ class CSTRReactorItem(QGraphicsItem):
         painter.drawText(QRectF(-w / 2, -h / 2 + eh + 3, w, 14),
                          Qt.AlignmentFlag.AlignCenter, rstr)
 
-        # Input port indicator (shown when hovered or selected)
+        # Port indicators (shown when hovered or selected)
         if hovered or selected:
-            port_local = QPointF(-w / 2 - 22, -h / 4)
             painter.setBrush(QBrush(QColor("#ffffff")))
             painter.setPen(QPen(border, 1.5))
-            painter.drawEllipse(port_local, 5, 5)
+            painter.drawEllipse(QPointF(-w / 2 - 22, -h / 4), 5, 5)
+            painter.drawEllipse(QPointF(w / 2 + 22, h / 4), 5, 5)
 
 
 def _draw_wave_line(painter: QPainter, x0: float, y0: float,
@@ -430,12 +439,150 @@ class HeaterCoolerItem(QGraphicsItem):
             painter.drawEllipse(port_local, 5, 5)
 
 
+# ── Flash Separator ───────────────────────────────────────────────────────────
+
+class FlashSeparatorItem(QGraphicsItem):
+    """PFD symbol for a single-stage flash separator."""
+
+    MIME_KEY = "flash_separator"
+
+    def __init__(self, name: str = "F-100", scene=None):
+        super().__init__()
+        self.name = name
+        self.config = FlashConfig()
+        self._scene_ref = scene
+        self._hovered = False
+        self._connected_streams: list = []
+        self._last_results = None
+
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges, True)
+        self.setAcceptHoverEvents(True)
+
+    def boundingRect(self) -> QRectF:
+        return QRectF(-_FW / 2 - 30, -_FH / 2 - 26, _FW + 60, _FH + 52)
+
+    def input_scene_ports(self) -> list[QPointF]:
+        """Feed inlet port on the left side."""
+        return [self.mapToScene(QPointF(-_FW / 2 - 22, 0))]
+
+    def output_scene_ports(self) -> list[QPointF]:
+        """Vapor port (top right) and liquid port (bottom right)."""
+        return [
+            self.mapToScene(QPointF(_FW / 2 + 22, -_FH / 4)),  # vapor
+            self.mapToScene(QPointF(_FW / 2 + 22,  _FH / 4)),  # liquid
+        ]
+
+    def hoverEnterEvent(self, event):
+        self._hovered = True
+        self.update()
+
+    def hoverLeaveEvent(self, event):
+        self._hovered = False
+        self.update()
+
+    def itemChange(self, change, value):
+        if change == QGraphicsItem.GraphicsItemChange.ItemPositionHasChanged:
+            for stream in self._connected_streams:
+                stream.prepareGeometryChange()
+                stream.update()
+        if change == QGraphicsItem.GraphicsItemChange.ItemSelectedHasChanged:
+            if self._scene_ref is not None:
+                if value:
+                    self._scene_ref._notify_selected(self)
+                else:
+                    if not self._scene_ref.selectedItems():
+                        self._scene_ref._notify_deselected()
+        return super().itemChange(change, value)
+
+    def paint(self, painter: QPainter, option, widget):
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        selected = self.isSelected()
+        hovered = self._hovered
+
+        if selected:
+            body_fill = QColor("#aed6f1")
+            border = QColor("#1a5276")
+            bw = 2.5
+        elif hovered:
+            body_fill = QColor("#d6eaf8")
+            border = QColor("#2980b9")
+            bw = 2.0
+        else:
+            body_fill = QColor("#ebf5fb")
+            border = QColor("#5dade2")
+            bw = 1.5
+
+        w, h = _FW, _FH
+
+        # Trapezoid: wider at top, narrower at bottom
+        trap = QPolygonF([
+            QPointF(-w / 2,       -h / 2),   # top-left
+            QPointF( w / 2,       -h / 2),   # top-right
+            QPointF( w / 2 - 10,   h / 2),   # bottom-right
+            QPointF(-w / 2 + 10,   h / 2),   # bottom-left
+        ])
+        painter.setPen(QPen(border, bw))
+        painter.setBrush(QBrush(body_fill))
+        painter.drawPolygon(trap)
+
+        # Horizontal dividing line (vapor / liquid)
+        painter.setPen(QPen(border, 1.0, Qt.PenStyle.DashLine))
+        painter.drawLine(QPointF(-w / 2 + 4, 0), QPointF(w / 2 - 4, 0))
+
+        # Phase labels
+        painter.setFont(QFont("", 7, QFont.Weight.Bold))
+        painter.setPen(QPen(QColor("#1a5276")))
+        painter.drawText(QRectF(-w / 2, -h / 2 + 4, w, 14),
+                         Qt.AlignmentFlag.AlignCenter, "V")
+        painter.drawText(QRectF(-w / 2 + 10, h / 2 - 18, w - 10, 14),
+                         Qt.AlignmentFlag.AlignCenter, "L")
+
+        # Feed inlet pipe (left center)
+        painter.setPen(QPen(border, bw))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawLine(QPointF(-w / 2 - 22, 0), QPointF(-w / 2, 0))
+        _draw_arrowhead(painter, -w / 2 + 1, 0, 6, border)
+
+        # Vapor outlet (top right)
+        painter.drawLine(QPointF(w / 2, -h / 4), QPointF(w / 2 + 22, -h / 4))
+        _draw_arrowhead(painter, w / 2 + 22, -h / 4, 6, border)
+
+        # Liquid outlet (bottom right)
+        painter.drawLine(QPointF(w / 2 - 10, h / 4), QPointF(w / 2 + 22, h / 4))
+        _draw_arrowhead(painter, w / 2 + 22, h / 4, 6, border)
+
+        if selected:
+            painter.setPen(QPen(QColor("#2980b9"), 1.2, Qt.PenStyle.DashLine))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawRect(self.boundingRect().adjusted(3, 3, -3, -3))
+
+        painter.setPen(QPen(QColor("#1a5276")))
+        painter.setFont(QFont("", 9, QFont.Weight.Bold))
+        painter.drawText(QRectF(-w / 2, h / 2 + 6, w, 18),
+                         Qt.AlignmentFlag.AlignCenter, self.name)
+
+        painter.setFont(QFont("", 7))
+        painter.setPen(QPen(QColor("#5d6d7e")))
+        painter.drawText(QRectF(-w / 2, -h / 2 - 18, w, 14),
+                         Qt.AlignmentFlag.AlignCenter, f"T = {self.config.T:.0f} K")
+
+        # Port indicators (shown when hovered or selected)
+        if hovered or selected:
+            painter.setBrush(QBrush(QColor("#ffffff")))
+            painter.setPen(QPen(border, 1.5))
+            painter.drawEllipse(QPointF(-w / 2 - 22, 0), 5, 5)
+            painter.drawEllipse(QPointF(w / 2 + 22, -h / 4), 5, 5)
+            painter.drawEllipse(QPointF(w / 2 + 22,  h / 4), 5, 5)
+
+
 # ── Stream ────────────────────────────────────────────────────────────────────
 
 class StreamItem(QGraphicsItem):
     """A directed connection arrow between two unit operations."""
 
-    def __init__(self, source: HeaterCoolerItem, dest: CSTRReactorItem):
+    def __init__(self, source, dest):
         super().__init__()
         self.source = source
         self.dest = dest
@@ -516,10 +663,16 @@ class FlowsheetScene(QGraphicsScene):
         self.addItem(item)
         return item
 
+    def add_flash(self, pos: QPointF) -> FlashSeparatorItem:
+        self._counter += 1
+        item = FlashSeparatorItem(f"F-{100 + self._counter - 1}", scene=self)
+        item.setPos(pos)
+        self.addItem(item)
+        return item
+
     # ── stream management ─────────────────────────────────────────────────
 
-    def add_stream(self, source: HeaterCoolerItem,
-                   dest: CSTRReactorItem) -> StreamItem:
+    def add_stream(self, source, dest) -> StreamItem:
         # Remove any existing connection to the same dest
         self.remove_streams_for(dest, role="dest")
         stream = StreamItem(source, dest)
@@ -553,7 +706,14 @@ class FlowsheetScene(QGraphicsScene):
     def get_upstream_heater(self, cstr: CSTRReactorItem):
         """Return the HeaterCoolerItem connected to cstr's input, or None."""
         for s in self._streams:
-            if s.dest is cstr:
+            if s.dest is cstr and isinstance(s.source, HeaterCoolerItem):
+                return s.source
+        return None
+
+    def get_upstream_cstr(self, flash: FlashSeparatorItem):
+        """Return the CSTRReactorItem connected to flash's input, or None."""
+        for s in self._streams:
+            if s.dest is flash and isinstance(s.source, CSTRReactorItem):
                 return s.source
         return None
 
@@ -578,9 +738,11 @@ class FlowsheetScene(QGraphicsScene):
             add_batch_act = QAction("Add Batch Reactor Here")
             add_cstr_act = QAction("Add CSTR Here")
             add_heater_act = QAction("Add Heater/Cooler Here")
+            add_flash_act = QAction("Add Flash Separator Here")
             menu.addAction(add_batch_act)
             menu.addAction(add_cstr_act)
             menu.addAction(add_heater_act)
+            menu.addAction(add_flash_act)
             chosen = menu.exec(event.screenPos())
             if chosen == add_batch_act:
                 r = self.add_reactor(event.scenePos())
@@ -591,7 +753,11 @@ class FlowsheetScene(QGraphicsScene):
             elif chosen == add_heater_act:
                 r = self.add_heater(event.scenePos())
                 self.clearSelection(); r.setSelected(True)
-        elif isinstance(item, (BatchReactorItem, CSTRReactorItem, HeaterCoolerItem)):
+            elif chosen == add_flash_act:
+                r = self.add_flash(event.scenePos())
+                self.clearSelection(); r.setSelected(True)
+        elif isinstance(item, (BatchReactorItem, CSTRReactorItem, HeaterCoolerItem,
+                               FlashSeparatorItem)):
             del_act = QAction(f"Delete  {item.name}")
             menu.addAction(del_act)
             chosen = menu.exec(event.screenPos())
@@ -620,7 +786,8 @@ class FlowsheetView(QGraphicsView):
 
         # Connection drag state
         self._connecting = False
-        self._conn_source: HeaterCoolerItem | None = None
+        self._conn_source = None
+        self._conn_source_port: QPointF | None = None
         self._temp_line: QGraphicsLineItem | None = None
 
     # ── background grid ───────────────────────────────────────────────────
@@ -652,11 +819,11 @@ class FlowsheetView(QGraphicsView):
         """Return (item, 'in'|'out') if scene_pos is near a port, else None."""
         sc = self.scene()
         for item in sc.items():
-            if isinstance(item, HeaterCoolerItem):
+            if hasattr(item, "output_scene_ports"):
                 for port in item.output_scene_ports():
                     if _dist(scene_pos, port) < _PORT_RADIUS:
                         return (item, "out")
-            elif isinstance(item, CSTRReactorItem):
+            if hasattr(item, "input_scene_ports"):
                 for port in item.input_scene_ports():
                     if _dist(scene_pos, port) < _PORT_RADIUS:
                         return (item, "in")
@@ -678,7 +845,9 @@ class FlowsheetView(QGraphicsView):
                 # Start connection drag from output port
                 self._connecting = True
                 self._conn_source = hit[0]
-                port = hit[0].output_scene_ports()[0]
+                ports = hit[0].output_scene_ports()
+                port = min(ports, key=lambda p: _dist(scene_pos, p))
+                self._conn_source_port = port
                 self._temp_line = self.scene().addLine(
                     QLineF(port, port),
                     QPen(QColor("#7f8c8d"), 1.5, Qt.PenStyle.DashLine))
@@ -699,7 +868,7 @@ class FlowsheetView(QGraphicsView):
 
         if self._connecting and self._temp_line is not None:
             scene_pos = self.mapToScene(event.position().toPoint())
-            src_port = self._conn_source.output_scene_ports()[0]
+            src_port = self._conn_source_port or self._conn_source.output_scene_ports()[0]
             self._temp_line.setLine(QLineF(src_port, scene_pos))
             # Highlight nearby input ports
             hit = self._port_at(scene_pos)
@@ -728,6 +897,7 @@ class FlowsheetView(QGraphicsView):
                 sc.add_stream(self._conn_source, hit[0])
             self._connecting = False
             self._conn_source = None
+            self._conn_source_port = None
             self.setCursor(Qt.CursorShape.ArrowCursor)
             return
 
@@ -739,7 +909,8 @@ class FlowsheetView(QGraphicsView):
         if event.key() == Qt.Key.Key_Delete:
             sc = self.scene()
             for item in list(sc.selectedItems()):
-                if isinstance(item, (BatchReactorItem, CSTRReactorItem, HeaterCoolerItem)):
+                if isinstance(item, (BatchReactorItem, CSTRReactorItem,
+                                     HeaterCoolerItem, FlashSeparatorItem)):
                     sc.remove_streams_for(item)
                 sc.removeItem(item)
             sc.reactor_deselected.emit()
@@ -777,6 +948,8 @@ class FlowsheetView(QGraphicsView):
                     reactor = sc.add_cstr(pos)
                 elif mime == HeaterCoolerItem.MIME_KEY:
                     reactor = sc.add_heater(pos)
+                elif mime == FlashSeparatorItem.MIME_KEY:
+                    reactor = sc.add_flash(pos)
                 else:
                     return
                 sc.clearSelection()

@@ -233,6 +233,49 @@ class PropertiesPanel(QWidget):
         self._heater_grp.setVisible(False)
         layout.addWidget(self._heater_grp)
 
+        # — Flash Separator Settings —
+        self._flash_grp = QGroupBox("Flash Separator")
+        flash_form = QFormLayout(self._flash_grp)
+        flash_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+
+        self._flash_T_spin = self._dspin(100.0, 1000.0, 350.0, 2)
+        flash_form.addRow("T (K):", self._flash_T_spin)
+        self._flash_T_spin.valueChanged.connect(self._update_flash)
+
+        self._flash_P_spin = self._dspin(0.001, 100.0, 1.013, 3)
+        flash_form.addRow("P (bar):", self._flash_P_spin)
+        self._flash_P_spin.valueChanged.connect(self._update_flash)
+
+        flash_form.addRow(QLabel("Species → Antoine constants (log₁₀, bar, K):"))
+
+        self._flash_species_table = QTableWidget(0, 4)
+        self._flash_species_table.setHorizontalHeaderLabels(["Species", "A", "B", "C"])
+        self._flash_species_table.horizontalHeader().setSectionResizeMode(
+            QHeaderView.ResizeMode.Stretch)
+        self._flash_species_table.setMinimumHeight(80)
+        self._flash_species_table.setMaximumHeight(160)
+        self._flash_species_table.cellChanged.connect(self._on_flash_species_changed)
+        flash_form.addRow(self._flash_species_table)
+
+        # Preset selector
+        from models.antoine_data import BUILTIN_ANTOINE
+        self._flash_preset_combo = QComboBox()
+        self._flash_preset_combo.addItem("— Select preset —")
+        for name in BUILTIN_ANTOINE:
+            self._flash_preset_combo.addItem(name)
+        self._flash_preset_row_spin = QSpinBox()
+        self._flash_preset_row_spin.setRange(0, 99)
+        self._flash_preset_row_spin.setPrefix("row ")
+        preset_row = QHBoxLayout()
+        preset_row.addWidget(QLabel("Fill row:"))
+        preset_row.addWidget(self._flash_preset_row_spin)
+        preset_row.addWidget(self._flash_preset_combo)
+        flash_form.addRow(preset_row)
+        self._flash_preset_combo.currentTextChanged.connect(self._on_flash_preset_selected)
+
+        self._flash_grp.setVisible(False)
+        layout.addWidget(self._flash_grp)
+
         # Run button
         self._run_btn = QPushButton("▶  Run Simulation")
         self._run_btn.setObjectName("run_btn")
@@ -248,7 +291,7 @@ class PropertiesPanel(QWidget):
 
     def load_reactor(self, item, upstream_heater=None):
         """Populate the panel from any flowsheet item (reactor or heater)."""
-        from ui.flowsheet_canvas import HeaterCoolerItem
+        from ui.flowsheet_canvas import HeaterCoolerItem, FlashSeparatorItem
         self._loading = True
         self._item = item
         self._upstream_heater = upstream_heater
@@ -258,22 +301,43 @@ class PropertiesPanel(QWidget):
         self._name_edit.setText(item.name)
 
         is_heater = isinstance(item, HeaterCoolerItem)
+        is_flash = isinstance(item, FlashSeparatorItem)
 
         # Show/hide groups based on item type
-        self._rxn_grp.setVisible(not is_heater)
-        self._kin_grp.setVisible(not is_heater)
-        self._species_grp.setVisible(not is_heater)
-        self._sim_grp.setVisible(not is_heater)
+        self._rxn_grp.setVisible(not is_heater and not is_flash)
+        self._kin_grp.setVisible(not is_heater and not is_flash)
+        self._species_grp.setVisible(not is_heater and not is_flash)
+        self._sim_grp.setVisible(not is_heater and not is_flash)
         self._heater_grp.setVisible(is_heater)
+        self._flash_grp.setVisible(is_flash)
+        self._cstr_grp.setVisible(False)
 
         if is_heater:
             self._reactor_type_lbl.setText("Heater / Cooler")
-            self._cstr_grp.setVisible(False)
             cfg = item.config
             self._h_T0_spin.setValue(cfg.T0)
             self._h_Ttarget_spin.setValue(cfg.T_target)
             self._h_tau_spin.setValue(cfg.tau)
             self._h_tend_spin.setValue(cfg.t_end)
+        elif is_flash:
+            self._reactor_type_lbl.setText("Flash Separator")
+            cfg = item.config
+            self._flash_T_spin.setValue(cfg.T)
+            self._flash_P_spin.setValue(cfg.P)
+            # Auto-populate species from upstream CSTR if flash has none yet
+            if not cfg.species and upstream_heater is not None:
+                pass  # upstream_heater here is actually upstream_cstr for flash
+            from models.flash import FlashSpeciesData
+            if not cfg.species:
+                # Check if scene has an upstream CSTR to pull species names from
+                if hasattr(item, '_scene_ref') and item._scene_ref is not None:
+                    upstream_cstr = item._scene_ref.get_upstream_cstr(item)
+                    if upstream_cstr is not None:
+                        cfg.species = [
+                            FlashSpeciesData(name=s.name)
+                            for s in upstream_cstr.reaction.species
+                        ]
+            self._load_flash_species(cfg)
         else:
             r: CustomReaction = item.reaction
             is_cstr = r.reactor_type == "cstr"
@@ -352,6 +416,74 @@ class PropertiesPanel(QWidget):
         cfg.tau = self._h_tau_spin.value()
         cfg.t_end = self._h_tend_spin.value()
         self._item.update()
+
+    def _update_flash(self):
+        if self._item is None or self._loading:
+            return
+        from ui.flowsheet_canvas import FlashSeparatorItem
+        if not isinstance(self._item, FlashSeparatorItem):
+            return
+        cfg = self._item.config
+        cfg.T = self._flash_T_spin.value()
+        cfg.P = self._flash_P_spin.value()
+        self._item.update()
+
+    def _on_flash_species_changed(self, row: int, col: int):
+        if self._loading:
+            return
+        from ui.flowsheet_canvas import FlashSeparatorItem
+        if not isinstance(self._item, FlashSeparatorItem):
+            return
+        self._read_flash_species_table()
+
+    def _on_flash_preset_selected(self, text: str):
+        if self._loading or not text or text.startswith("—"):
+            return
+        from models.antoine_data import BUILTIN_ANTOINE
+        if text not in BUILTIN_ANTOINE:
+            return
+        row = self._flash_preset_row_spin.value()
+        if row >= self._flash_species_table.rowCount():
+            return
+        data = BUILTIN_ANTOINE[text]
+        self._loading = True
+        self._flash_species_table.setItem(row, 1, QTableWidgetItem(str(data["A"])))
+        self._flash_species_table.setItem(row, 2, QTableWidgetItem(str(data["B"])))
+        self._flash_species_table.setItem(row, 3, QTableWidgetItem(str(data["C"])))
+        self._loading = False
+        self._flash_preset_combo.setCurrentIndex(0)
+        self._read_flash_species_table()
+
+    def _load_flash_species(self, cfg):
+        self._flash_species_table.blockSignals(True)
+        self._flash_species_table.setRowCount(len(cfg.species))
+        for i, s in enumerate(cfg.species):
+            self._flash_species_table.setItem(i, 0, QTableWidgetItem(s.name))
+            self._flash_species_table.setItem(i, 1, QTableWidgetItem(f"{s.A:.5f}"))
+            self._flash_species_table.setItem(i, 2, QTableWidgetItem(f"{s.B:.3f}"))
+            self._flash_species_table.setItem(i, 3, QTableWidgetItem(f"{s.C:.3f}"))
+        self._flash_species_table.blockSignals(False)
+
+    def _read_flash_species_table(self):
+        from ui.flowsheet_canvas import FlashSeparatorItem
+        from models.flash import FlashSpeciesData
+        if not isinstance(self._item, FlashSeparatorItem):
+            return
+        species = []
+        for row in range(self._flash_species_table.rowCount()):
+            def _cell(r, c):
+                item = self._flash_species_table.item(r, c)
+                return item.text().strip() if item else ""
+            name = _cell(row, 0)
+            try:
+                A = float(_cell(row, 1))
+                B = float(_cell(row, 2))
+                C = float(_cell(row, 3))
+            except ValueError:
+                continue
+            if name:
+                species.append(FlashSpeciesData(name=name, A=A, B=B, C=C))
+        self._item.config.species = species
 
     def _update(self):
         if self._item is None or self._loading:
