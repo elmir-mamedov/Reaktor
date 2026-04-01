@@ -100,6 +100,34 @@ class _Canvas(FigureCanvasQTAgg):
         self.fig.tight_layout()
         self.draw_idle()
 
+    def plot_mass_balance(self, results: dict):
+        self.fig.clear()
+        ax = self.fig.add_subplot(111)
+        t = results["t"]
+        streams = results["streams"]
+        species_list = list(streams[0]["flows"].keys())
+        for i, sp in enumerate(species_list):
+            color = _COLORS[i % len(_COLORS)]
+            for stream in streams:
+                if sp not in stream["flows"]:
+                    continue
+                is_in = stream["direction"] == "in"
+                ax.plot(t, stream["flows"][sp],
+                        color=color,
+                        lw=1.5 if is_in else 2.0,
+                        ls="--" if is_in else "-",
+                        label=f"{stream['name']} – {sp}")
+        ax.set_xlabel("Time (s)", fontsize=10)
+        ax.set_ylabel("Molar flow (mol/s)", fontsize=10)
+        ax.set_title("Mass Balance — Molar Flows", fontsize=11, fontweight="bold")
+        ax.legend(fontsize=9, framealpha=0.9)
+        ax.set_xlim(0, t[-1])
+        ax.set_ylim(bottom=0)
+        ax.grid(True, alpha=0.3)
+        ax.set_facecolor("#fafafa")
+        self.fig.tight_layout()
+        self.draw_idle()
+
 
 class ResultsPanel(QWidget):
     def __init__(self, parent=None):
@@ -127,24 +155,35 @@ class ResultsPanel(QWidget):
             QHeaderView.ResizeMode.Stretch)
         self._table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
 
+        self._mb_canvas = _Canvas()
+
         self._tabs.addTab(self._conc_canvas, "Concentrations")
         self._tabs.addTab(self._conv_canvas, "Conversion")
         self._tabs.addTab(self._extra_canvas, "")
         self._tabs.addTab(self._table, "Data Table")
+        self._tabs.addTab(self._mb_canvas, "Mass Balance")
         self._tabs.setTabVisible(2, False)
+        self._tabs.setTabVisible(4, False)
 
     def display(self, results: dict, reactor_name: str = ""):
         self._tabs.setTabVisible(2, False)
+        suffix = f" — {reactor_name}" if reactor_name else ""
+        has_mb = "streams" in results
+        self._tabs.setTabVisible(4, has_mb)
         self._conc_canvas.plot_concentrations(results)
         self._conv_canvas.plot_conversion(results)
+        if has_mb:
+            self._mb_canvas.plot_mass_balance(results)
         self._populate_table(results)
-        suffix = f" — {reactor_name}" if reactor_name else ""
         self._tabs.setTabText(0, f"Concentrations{suffix}")
         self._tabs.setTabText(1, f"Conversion{suffix}")
         self._tabs.setTabText(3, "Data Table")
+        if has_mb:
+            self._tabs.setTabText(4, f"Mass Balance{suffix}")
 
     def display_heater(self, results: dict, reactor_name: str = ""):
         self._tabs.setTabVisible(2, False)
+        self._tabs.setTabVisible(4, False)
         self._conc_canvas.plot_temperature(results)
         self._conv_canvas.plot_approach(results)
         self._populate_heater_table(results)
@@ -201,15 +240,21 @@ class ResultsPanel(QWidget):
 
     def display_coupled(self, heater_results: dict, cstr_results: dict, name: str = ""):
         self._tabs.setTabVisible(2, True)
+        suffix = f" — {name}" if name else ""
+        has_mb = "streams" in cstr_results
+        self._tabs.setTabVisible(4, has_mb)
         self._conc_canvas.plot_temperature(heater_results)
         self._conv_canvas.plot_concentrations(cstr_results)
         self._extra_canvas.plot_conversion(cstr_results)
+        if has_mb:
+            self._mb_canvas.plot_mass_balance(cstr_results)
         self._populate_coupled_table(heater_results, cstr_results)
-        suffix = f" — {name}" if name else ""
         self._tabs.setTabText(0, f"Temperature{suffix}")
         self._tabs.setTabText(1, f"Concentrations{suffix}")
         self._tabs.setTabText(2, f"Conversion{suffix}")
         self._tabs.setTabText(3, "Data Table")
+        if has_mb:
+            self._tabs.setTabText(4, f"Mass Balance{suffix}")
 
     def _populate_coupled_table(self, heater_results: dict, cstr_results: dict):
         t = cstr_results["t"]

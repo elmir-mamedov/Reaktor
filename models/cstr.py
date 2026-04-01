@@ -12,7 +12,7 @@ def build_rhs(reaction: CustomReaction):
     rhs_fn signature: rhs(t, y_local, context) -> list
     context keys consumed: "temperature" (K) — overrides reaction.T when provided
     """
-    tau = reaction.tau
+    tau = reaction.V / reaction.Q
     reactants = [s for s in reaction.species if s.is_reactant]
     idx = {s.name: i for i, s in enumerate(reaction.species)}
 
@@ -73,10 +73,17 @@ def simulate_cstr(reaction: CustomReaction) -> Dict:
     Ca_idx = idx[ref.name]
     conversion = (1.0 - sol.y[Ca_idx] / Ca_feed) if Ca_feed > 0 else np.zeros_like(sol.t)
 
+    concentrations = {s.name: sol.y[idx[s.name]] for s in reaction.species}
+
+    from models.streams import build_single_pass_streams
+    streams = build_single_pass_streams(reaction.species, reaction.Q, sol.t, concentrations)
+
     return {
         "t": sol.t,
-        "concentrations": {s.name: sol.y[idx[s.name]] for s in reaction.species},
+        "concentrations": concentrations,
         "conversion": conversion,
+        "streams": streams,
+        "Q": reaction.Q,
         "success": sol.success,
         "message": sol.message,
     }

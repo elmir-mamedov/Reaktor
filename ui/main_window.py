@@ -260,10 +260,16 @@ class MainWindow(QMainWindow):
                         "success": sol.success,
                         "message": sol.message,
                     }
+                    cstr_concentrations = {s.name: c_y[idx[s.name]] for s in item.reaction.species}
+                    from models.streams import build_single_pass_streams
                     cstr_results = {
                         "t": sol.t,
-                        "concentrations": {s.name: c_y[idx[s.name]] for s in item.reaction.species},
+                        "concentrations": cstr_concentrations,
                         "conversion": conversion,
+                        "streams": build_single_pass_streams(
+                            item.reaction.species, item.reaction.Q, sol.t, cstr_concentrations
+                        ),
+                        "Q": item.reaction.Q,
                         "success": sol.success,
                         "message": sol.message,
                     }
