@@ -100,6 +100,46 @@ class _Canvas(FigureCanvasQTAgg):
         self.fig.tight_layout()
         self.draw_idle()
 
+    def plot_flash_phase(self, results: dict, phase: str):
+        """Plot mole fraction vs time for vapor (y_i) or liquid (x_i)."""
+        self.fig.clear()
+        ax = self.fig.add_subplot(111)
+        t = results["t"]
+        data = results[phase]  # "vapor" or "liquid"
+        label_char = "y" if phase == "vapor" else "x"
+        for i, (sp, arr) in enumerate(data.items()):
+            ax.plot(t, arr, color=_COLORS[i % len(_COLORS)],
+                    linewidth=2, label=f"${label_char}_{{{sp}}}$")
+        phase_name = "Vapor" if phase == "vapor" else "Liquid"
+        ax.set_xlabel("Time (s)", fontsize=10)
+        ax.set_ylabel(f"{phase_name} mole fraction (−)", fontsize=10)
+        ax.set_title(f"{phase_name} Phase Composition", fontsize=11, fontweight="bold")
+        ax.legend(fontsize=9, framealpha=0.9)
+        ax.set_xlim(0, t[-1])
+        ax.set_ylim(0, 1.05)
+        ax.grid(True, alpha=0.3)
+        ax.set_facecolor("#fafafa")
+        self.fig.tight_layout()
+        self.draw_idle()
+
+    def plot_flash_psi(self, results: dict):
+        """Plot vapor fraction ψ(t)."""
+        self.fig.clear()
+        ax = self.fig.add_subplot(111)
+        t = results["t"]
+        psi = results["psi"]
+        ax.plot(t, psi, color="#8e44ad", linewidth=2)
+        ax.fill_between(t, psi, alpha=0.12, color="#8e44ad")
+        ax.set_xlabel("Time (s)", fontsize=10)
+        ax.set_ylabel("Vapor fraction ψ (−)", fontsize=10)
+        ax.set_title("Vapor Fraction vs. Time", fontsize=11, fontweight="bold")
+        ax.set_xlim(0, t[-1])
+        ax.set_ylim(0, 1.05)
+        ax.grid(True, alpha=0.3)
+        ax.set_facecolor("#fafafa")
+        self.fig.tight_layout()
+        self.draw_idle()
+
     def plot_mass_balance(self, results: dict):
         self.fig.clear()
         ax = self.fig.add_subplot(111)
@@ -282,3 +322,47 @@ class ResultsPanel(QWidget):
                     row, col, QTableWidgetItem(f"{concs[sp][idx]:.6f}"))
             self._table.setItem(
                 row, len(species) + 2, QTableWidgetItem(f"{X[idx]:.6f}"))
+
+    def display_flash(self, results: dict, name: str = ""):
+        suffix = f" — {name}" if name else ""
+        self._tabs.setTabVisible(2, True)
+        self._tabs.setTabVisible(4, True)
+        self._conc_canvas.plot_flash_phase(results, "vapor")
+        self._conv_canvas.plot_flash_phase(results, "liquid")
+        self._extra_canvas.plot_flash_psi(results)
+        self._mb_canvas.plot_mass_balance(results)
+        self._populate_flash_table(results)
+        self._tabs.setTabText(0, f"Vapor (y_i){suffix}")
+        self._tabs.setTabText(1, f"Liquid (x_i){suffix}")
+        self._tabs.setTabText(2, f"Vapor Fraction ψ{suffix}")
+        self._tabs.setTabText(3, "Data Table")
+        self._tabs.setTabText(4, f"Mass Balance{suffix}")
+
+    def _populate_flash_table(self, results: dict):
+        t = results["t"]
+        vapor = results["vapor"]
+        liquid = results["liquid"]
+        psi = results["psi"]
+        species = list(vapor.keys())
+
+        headers = (["Time (s)", "ψ (−)"]
+                   + [f"y_{s}" for s in species]
+                   + [f"x_{s}" for s in species])
+
+        step = max(1, len(t) // 100)
+        idxs = list(range(0, len(t), step))
+        if idxs[-1] != len(t) - 1:
+            idxs.append(len(t) - 1)
+
+        self._table.setColumnCount(len(headers))
+        self._table.setRowCount(len(idxs))
+        self._table.setHorizontalHeaderLabels(headers)
+
+        for row, idx in enumerate(idxs):
+            self._table.setItem(row, 0, QTableWidgetItem(f"{t[idx]:.4f}"))
+            self._table.setItem(row, 1, QTableWidgetItem(f"{psi[idx]:.4f}"))
+            for col, sp in enumerate(species, 2):
+                self._table.setItem(row, col, QTableWidgetItem(f"{vapor[sp][idx]:.6f}"))
+            offset = 2 + len(species)
+            for col, sp in enumerate(species, offset):
+                self._table.setItem(row, col, QTableWidgetItem(f"{liquid[sp][idx]:.6f}"))

@@ -217,6 +217,49 @@ class HeaterCoolerTile(EquipmentTile):
             painter.drawPath(path)
 
 
+class FlashSeparatorTile(EquipmentTile):
+    """Palette tile for dragging a Flash Separator onto the flowsheet."""
+
+    def _draw_reactor_icon(self, painter: QPainter, cx: int, cy: int, w: int, h: int):
+        from PyQt6.QtGui import QPolygonF
+        from PyQt6.QtCore import QPointF as _QPointF
+
+        bh = h * 2 // 3
+        # Trapezoid body
+        trap = QPolygonF([
+            _QPointF(cx - w // 2,      cy - bh // 2),
+            _QPointF(cx + w // 2,      cy - bh // 2),
+            _QPointF(cx + w // 2 - 6,  cy + bh // 2),
+            _QPointF(cx - w // 2 + 6,  cy + bh // 2),
+        ])
+        painter.setPen(QPen(QColor("#2980b9"), 1.5))
+        painter.setBrush(QBrush(QColor("#aed6f1")))
+        painter.drawPolygon(trap)
+
+        # Dividing line
+        painter.setPen(QPen(QColor("#2980b9"), 1.0, Qt.PenStyle.DashLine))
+        painter.drawLine(cx - w // 2 + 2, cy, cx + w // 2 - 2, cy)
+
+        # Phase labels
+        painter.setPen(QPen(QColor("#1a5276")))
+        painter.setFont(QFont("", 7, QFont.Weight.Bold))
+        painter.drawText(cx - 4, cy - 4, "V")
+        painter.drawText(cx - 4, cy + 12, "L")
+
+        # Inlet pipe (left)
+        painter.setPen(QPen(QColor("#2980b9"), 1.5))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawLine(cx - w // 2 - 8, cy, cx - w // 2, cy)
+        tip_in = _QPointF(cx - w // 2 + 1, cy)
+        from PyQt6.QtGui import QPolygonF as _PF
+        poly = _PF([tip_in,
+                    _QPointF(cx - w // 2 - 4, cy - 3),
+                    _QPointF(cx - w // 2 - 4, cy + 3)])
+        painter.setBrush(QBrush(QColor("#2980b9")))
+        painter.setPen(QPen(QColor("#2980b9"), 0))
+        painter.drawPolygon(poly)
+
+
 class PalettePanel(QWidget):
     """Equipment palette dock contents."""
 
@@ -262,6 +305,18 @@ class PalettePanel(QWidget):
 
         heater_tile = HeaterCoolerTile("Heater/Cooler", "heater_cooler")
         layout.addWidget(heater_tile, alignment=Qt.AlignmentFlag.AlignHCenter)
+
+        sep3 = QFrame()
+        sep3.setFrameShape(QFrame.Shape.HLine)
+        sep3.setStyleSheet("color: #bdc3c7;")
+        layout.addWidget(sep3)
+
+        cat3 = QLabel("Separation")
+        cat3.setStyleSheet("color: #1a5276; font-size: 11px; font-weight: bold;")
+        layout.addWidget(cat3)
+
+        flash_tile = FlashSeparatorTile("Flash Sep.", "flash_separator")
+        layout.addWidget(flash_tile, alignment=Qt.AlignmentFlag.AlignHCenter)
 
         tip = QLabel("Drag onto the\nflowsheet to add")
         tip.setStyleSheet("color: #95a5a6; font-size: 10px;")
