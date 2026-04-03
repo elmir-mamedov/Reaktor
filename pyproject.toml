@@ -10,3 +10,11 @@ dependencies = [
     "pyqt6>=6.7.0",
     "scipy>=1.14.0",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
