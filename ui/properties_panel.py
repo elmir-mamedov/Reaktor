@@ -255,6 +255,7 @@ class PropertiesPanel(QWidget):
             QHeaderView.ResizeMode.Stretch)
         self._flash_species_table.setMinimumHeight(80)
         self._flash_species_table.setMaximumHeight(160)
+        self._flash_species_table.setStyleSheet("QTableWidget::item { color: black; }")
         self._flash_species_table.cellChanged.connect(self._on_flash_species_changed)
         flash_form.addRow(self._flash_species_table)
 
