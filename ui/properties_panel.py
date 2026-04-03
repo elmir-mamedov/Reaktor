@@ -163,6 +163,7 @@ class PropertiesPanel(QWidget):
             QTableWidget.SelectionBehavior.SelectRows)
         self._species_table.setMinimumHeight(80)
         self._species_table.setMaximumHeight(200)
+        self._species_table.setStyleSheet("QTableWidget::item { color: black; }")
         self._species_table.cellChanged.connect(self._on_species_changed)
         cust_layout.addWidget(self._species_table)
 
@@ -507,11 +508,9 @@ class PropertiesPanel(QWidget):
     # ── species table helpers ─────────────────────────────────────────────
 
     def _load_species(self, rxn: CustomReaction):
-        self._species_table.blockSignals(True)
         self._species_table.setRowCount(0)
         for s in rxn.species:
             self._append_species_row(s.name, s.stoich, s.is_reactant, s.C0, s.C_feed)
-        self._species_table.blockSignals(False)
         self._update_reaction_preview()
 
     def _append_species_row(self, name: str = "X", stoich: float = 1.0,
