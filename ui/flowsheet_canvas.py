@@ -12,6 +12,7 @@ from PyQt6.QtGui import QPolygonF
 from models.reaction import CustomReaction, default_reaction, default_cstr_reaction
 from models.heater import HeaterConfig
 from models.flash import FlashConfig
+from models.absorption import AbsorptionConfig
 
 # ── Batch reactor geometry ────────────────────────────────────────────────────
 _W = 64       # vessel body width
@@ -32,6 +33,10 @@ _FW = 70      # flash body width
 _FH = 90      # flash body height
 
 _PORT_RADIUS = 12   # px — how close cursor must be to snap to a port
+
+# ── Absorption Column geometry ────────────────────────────────────────────────
+_ACW = 56     # column body width
+_ACH = 100    # column body height
 
 
 class BatchReactorItem(QGraphicsItem):
@@ -577,6 +582,128 @@ class FlashSeparatorItem(QGraphicsItem):
             painter.drawEllipse(QPointF(w / 2 + 22,  h / 4), 5, 5)
 
 
+# ── Absorption Column ─────────────────────────────────────────────────────────
+
+class AbsorptionColumnItem(QGraphicsItem):
+    """PFD symbol for a packed absorption column (steady-state design block)."""
+
+    MIME_KEY = "absorption_column"
+
+    def __init__(self, name: str = "A-100", scene=None):
+        super().__init__()
+        self.name = name
+        self.config = AbsorptionConfig()
+        self._scene_ref = scene
+        self._hovered = False
+        self._connected_streams: list = []
+        self._last_results = None
+
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges, True)
+        self.setAcceptHoverEvents(True)
+
+    def boundingRect(self) -> QRectF:
+        return QRectF(-_ACW / 2 - 30, -_ACH / 2 - 26, _ACW + 60, _ACH + 52)
+
+    def hoverEnterEvent(self, event):
+        self._hovered = True
+        self.update()
+
+    def hoverLeaveEvent(self, event):
+        self._hovered = False
+        self.update()
+
+    def itemChange(self, change, value):
+        if change == QGraphicsItem.GraphicsItemChange.ItemPositionHasChanged:
+            for stream in self._connected_streams:
+                stream.prepareGeometryChange()
+                stream.update()
+        if change == QGraphicsItem.GraphicsItemChange.ItemSelectedHasChanged:
+            if self._scene_ref is not None:
+                if value:
+                    self._scene_ref._notify_selected(self)
+                else:
+                    if not self._scene_ref.selectedItems():
+                        self._scene_ref._notify_deselected()
+        return super().itemChange(change, value)
+
+    def paint(self, painter: QPainter, option, widget):
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        selected = self.isSelected()
+        hovered  = self._hovered
+
+        if selected:
+            body_fill = QColor("#a2d9ce")
+            border    = QColor("#0e6655")
+            bw = 2.5
+        elif hovered:
+            body_fill = QColor("#c0ece5")
+            border    = QColor("#148f77")
+            bw = 2.0
+        else:
+            body_fill = QColor("#d1f2eb")
+            border    = QColor("#1abc9c")
+            bw = 1.5
+
+        w, h = _ACW, _ACH
+        pen   = QPen(border, bw)
+        brush = QBrush(body_fill)
+        painter.setPen(pen)
+        painter.setBrush(brush)
+        painter.drawRect(QRectF(-w / 2, -h / 2, w, h))
+
+        # Cross-hatch fill (packed-bed symbol) — 45° lines
+        hatch_pen = QPen(border, 0.7)
+        hatch_pen.setStyle(Qt.PenStyle.SolidLine)
+        painter.setPen(hatch_pen)
+        step = 10
+        for i in range(-h, h + w, step):
+            x1 = -w / 2
+            y1 = -h / 2 + i
+            x2 = x1 + h
+            y2 = -h / 2
+            # Clip to rectangle bounds with simple parametric approach
+            painter.setClipRect(QRectF(-w / 2, -h / 2, w, h))
+            painter.drawLine(QPointF(x1, y1), QPointF(x1 + w + h, y1 - w - h))
+        painter.setClipping(False)
+
+        # Port stub lines (drawn on top of hatch)
+        painter.setPen(QPen(border, bw))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        # Liquid inlet — top left
+        painter.drawLine(QPointF(-w / 2 - 22, -h / 4), QPointF(-w / 2, -h / 4))
+        _draw_arrowhead(painter, -w / 2 + 1, -h / 4, 6, border)
+        # Gas inlet — bottom right
+        painter.drawLine(QPointF(w / 2, h / 4), QPointF(w / 2 + 22, h / 4))
+        _draw_arrowhead(painter, w / 2 - 1, h / 4, 6, border)
+        # Gas outlet — top right
+        painter.drawLine(QPointF(w / 2, -h / 4), QPointF(w / 2 + 22, -h / 4))
+        _draw_arrowhead(painter, w / 2 + 22, -h / 4, 6, border)
+        # Liquid outlet — bottom left
+        painter.drawLine(QPointF(-w / 2 - 22, h / 4), QPointF(-w / 2, h / 4))
+        _draw_arrowhead(painter, -w / 2 - 22, h / 4, 6, border)
+
+        # Name label below
+        painter.setPen(QPen(QColor("#0e6655")))
+        painter.setFont(QFont("", 9, QFont.Weight.Bold))
+        painter.drawText(QRectF(-w / 2, h / 2 + 6, w, 18),
+                         Qt.AlignmentFlag.AlignCenter, self.name)
+
+        # Packing hint above
+        painter.setFont(QFont("", 7))
+        painter.setPen(QPen(QColor("#5d6d7e")))
+        packing_short = self.config.packing.split()[0] + " " + self.config.packing.split()[1] \
+            if len(self.config.packing.split()) >= 2 else self.config.packing
+        painter.drawText(QRectF(-w / 2, -h / 2 - 18, w, 14),
+                         Qt.AlignmentFlag.AlignCenter, packing_short)
+
+        if selected:
+            painter.setPen(QPen(QColor("#1abc9c"), 1.2, Qt.PenStyle.DashLine))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawRect(self.boundingRect().adjusted(3, 3, -3, -3))
+
+
 # ── Stream ────────────────────────────────────────────────────────────────────
 
 class StreamItem(QGraphicsItem):
@@ -670,6 +797,13 @@ class FlowsheetScene(QGraphicsScene):
         self.addItem(item)
         return item
 
+    def add_absorption_column(self, pos: QPointF) -> AbsorptionColumnItem:
+        self._counter += 1
+        item = AbsorptionColumnItem(f"A-{100 + self._counter - 1}", scene=self)
+        item.setPos(pos)
+        self.addItem(item)
+        return item
+
     # ── stream management ─────────────────────────────────────────────────
 
     def add_stream(self, source, dest) -> StreamItem:
@@ -739,10 +873,12 @@ class FlowsheetScene(QGraphicsScene):
             add_cstr_act = QAction("Add CSTR Here")
             add_heater_act = QAction("Add Heater/Cooler Here")
             add_flash_act = QAction("Add Flash Separator Here")
+            add_abs_act = QAction("Add Absorption Column Here")
             menu.addAction(add_batch_act)
             menu.addAction(add_cstr_act)
             menu.addAction(add_heater_act)
             menu.addAction(add_flash_act)
+            menu.addAction(add_abs_act)
             chosen = menu.exec(event.screenPos())
             if chosen == add_batch_act:
                 r = self.add_reactor(event.scenePos())
@@ -756,8 +892,11 @@ class FlowsheetScene(QGraphicsScene):
             elif chosen == add_flash_act:
                 r = self.add_flash(event.scenePos())
                 self.clearSelection(); r.setSelected(True)
+            elif chosen == add_abs_act:
+                r = self.add_absorption_column(event.scenePos())
+                self.clearSelection(); r.setSelected(True)
         elif isinstance(item, (BatchReactorItem, CSTRReactorItem, HeaterCoolerItem,
-                               FlashSeparatorItem)):
+                               FlashSeparatorItem, AbsorptionColumnItem)):
             del_act = QAction(f"Delete  {item.name}")
             menu.addAction(del_act)
             chosen = menu.exec(event.screenPos())
@@ -910,7 +1049,8 @@ class FlowsheetView(QGraphicsView):
             sc = self.scene()
             for item in list(sc.selectedItems()):
                 if isinstance(item, (BatchReactorItem, CSTRReactorItem,
-                                     HeaterCoolerItem, FlashSeparatorItem)):
+                                     HeaterCoolerItem, FlashSeparatorItem,
+                                     AbsorptionColumnItem)):
                     sc.remove_streams_for(item)
                 sc.removeItem(item)
             sc.reactor_deselected.emit()
@@ -950,6 +1090,8 @@ class FlowsheetView(QGraphicsView):
                     reactor = sc.add_heater(pos)
                 elif mime == FlashSeparatorItem.MIME_KEY:
                     reactor = sc.add_flash(pos)
+                elif mime == AbsorptionColumnItem.MIME_KEY:
+                    reactor = sc.add_absorption_column(pos)
                 else:
                     return
                 sc.clearSelection()

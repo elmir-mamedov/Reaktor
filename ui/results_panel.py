@@ -140,6 +140,75 @@ class _Canvas(FigureCanvasQTAgg):
         self.fig.tight_layout()
         self.draw_idle()
 
+    def plot_absorption_profiles(self, results: dict):
+        """Tab 0: y(z), y*(z) on left axis; x(z) on right axis."""
+        self.fig.clear()
+        ax = self.fig.add_subplot(111)
+        z = results["z"]
+        ax.plot(z, results["y"],      color="#2980b9", linewidth=2, label="y (gas)")
+        ax.plot(z, results["y_star"], color="#2980b9", linewidth=1.5,
+                linestyle="--", label="y* (equilibrium)")
+        ax.set_xlabel("Column height z (m)", fontsize=10)
+        ax.set_ylabel("Gas mole fraction y (−)", fontsize=10, color="#2980b9")
+        ax.tick_params(axis="y", labelcolor="#2980b9")
+        ax2 = ax.twinx()
+        ax2.plot(z, results["x"], color="#e74c3c", linewidth=2, label="x (liquid)")
+        ax2.set_ylabel("Liquid mole fraction x (−)", fontsize=10, color="#e74c3c")
+        ax2.tick_params(axis="y", labelcolor="#e74c3c")
+        ax.set_xlim(0, z[-1])
+        ax.set_title("Composition Profiles along Column Height",
+                     fontsize=11, fontweight="bold")
+        ax.grid(True, alpha=0.3)
+        ax.set_facecolor("#fafafa")
+        # Combined legend
+        lines1, labels1 = ax.get_legend_handles_labels()
+        lines2, labels2 = ax2.get_legend_handles_labels()
+        ax.legend(lines1 + lines2, labels1 + labels2, fontsize=9, framealpha=0.9)
+        self.fig.tight_layout()
+        self.draw_idle()
+
+    def plot_hetp_profile(self, results: dict):
+        """Tab 1: HOG(z) and HETP(z) with mean reference lines."""
+        self.fig.clear()
+        ax = self.fig.add_subplot(111)
+        z = results["z"]
+        ax.plot(z, results["HOG"],  color="#1abc9c", linewidth=2, label="HOG")
+        ax.plot(z, results["HETP"], color="#f39c12", linewidth=2, label="HETP")
+        ax.axhline(results["HOG_mean"],  color="#1abc9c", linewidth=1,
+                   linestyle=":", label=f"HOG mean = {results['HOG_mean']:.3f} m")
+        ax.axhline(results["HETP_mean"], color="#f39c12", linewidth=1,
+                   linestyle=":", label=f"HETP mean = {results['HETP_mean']:.3f} m")
+        ax.set_xlabel("Column height z (m)", fontsize=10)
+        ax.set_ylabel("Transfer unit height (m)", fontsize=10)
+        ax.set_title("HOG and HETP along Column Height", fontsize=11, fontweight="bold")
+        ax.legend(fontsize=9, framealpha=0.9)
+        ax.set_xlim(0, z[-1])
+        ax.set_ylim(bottom=0)
+        ax.grid(True, alpha=0.3)
+        ax.set_facecolor("#fafafa")
+        self.fig.tight_layout()
+        self.draw_idle()
+
+    def plot_transfer_coefficients(self, results: dict):
+        """Tab 2: k_G·a, k_L·a, K_OG·a along z."""
+        self.fig.clear()
+        ax = self.fig.add_subplot(111)
+        z = results["z"]
+        ax.plot(z, results["kG_a"],  color="#2980b9", linewidth=2, label="$k_G a$")
+        ax.plot(z, results["kL_a"],  color="#e74c3c", linewidth=2, label="$k_L a$")
+        ax.plot(z, results["KOG_a"], color="#27ae60", linewidth=2,
+                linestyle="--", label="$K_{OG} a$")
+        ax.set_xlabel("Column height z (m)", fontsize=10)
+        ax.set_ylabel("Volumetric coeff. (s⁻¹)", fontsize=10)
+        ax.set_title("Mass Transfer Coefficients", fontsize=11, fontweight="bold")
+        ax.legend(fontsize=9, framealpha=0.9)
+        ax.set_xlim(0, z[-1])
+        ax.set_ylim(bottom=0)
+        ax.grid(True, alpha=0.3)
+        ax.set_facecolor("#fafafa")
+        self.fig.tight_layout()
+        self.draw_idle()
+
     def plot_mass_balance(self, results: dict):
         self.fig.clear()
         ax = self.fig.add_subplot(111)
@@ -337,6 +406,53 @@ class ResultsPanel(QWidget):
         self._tabs.setTabText(2, f"Vapor Fraction ψ{suffix}")
         self._tabs.setTabText(3, "Data Table")
         self._tabs.setTabText(4, f"Mass Balance{suffix}")
+
+    def display_absorption(self, results: dict, name: str = ""):
+        """Show steady-state absorption column results."""
+        suffix = f" — {name}" if name else ""
+        self._tabs.setTabVisible(2, True)
+        self._tabs.setTabVisible(4, False)
+        self._conc_canvas.plot_absorption_profiles(results)
+        self._conv_canvas.plot_hetp_profile(results)
+        self._extra_canvas.plot_transfer_coefficients(results)
+        self._populate_absorption_table(results)
+        self._tabs.setTabText(0, f"Profiles{suffix}")
+        self._tabs.setTabText(1, f"HETP / HOG{suffix}")
+        self._tabs.setTabText(2, f"Mass Transfer{suffix}")
+        self._tabs.setTabText(3, "Data Table")
+
+    def _populate_absorption_table(self, results: dict):
+        """2-column scalar summary table for absorption column results."""
+        rows = [
+            ("NOG (−)",                          f"{results['NOG']:.4f}"),
+            ("HOG mean (m)",                     f"{results['HOG_mean']:.4f}"),
+            ("HETP mean (m)",                    f"{results['HETP_mean']:.4f}"),
+            ("HETP bottom (m)",                  f"{results['HETP_bottom']:.4f}"),
+            ("HETP top (m)",                     f"{results['HETP_top']:.4f}"),
+            ("Packed bed height H (m)",          f"{results['H_col']:.4f}"),
+            ("Pressure drop ΔP (Pa)",            f"{results['delta_P']:.2f}"),
+            ("Liquid flow L (mol/s)",            f"{results['L_molar']:.4f}"),
+            ("Liquid flow L (kg/s)",             f"{results['L_mass']:.4f}"),
+            ("Superficial liquid vel. u_L (m/s)",f"{results['u_L']:.5f}"),
+            ("Flooding velocity u_G,Fl (m/s)",   f"{results['u_G_Fl']:.4f}"),
+            ("Operating u_G (m/s)",              f"{results['u_G_actual']:.4f}"),
+            ("u_G / u_G,Fl (%)",                 f"{results['loading_frac']*100:.1f}"),
+            ("L_min (mol/s)",                    f"{results['L_molar_min']:.2f}"),
+            ("L operating (mol/s)",              f"{results['L_molar']:.2f}"),
+            ("L / L_min factor",                 f"{results['L_factor']:.3f}"),
+            ("Stripping factor λ (−)",           f"{results['lambda_val']:.4f}"),
+            ("Absorption factor A (−)",          f"{results['A_abs']:.6f}"),
+            ("Equilibrium slope m (−)",          f"{results['m']:.2f}"),
+            ("Liquid exit x_out (−)",            f"{results['x_out']:.6f}"),
+            ("Gas-side resistance (%)",          f"{results['R_gas_pct']:.2f}"),
+            ("Liquid-side resistance (%)",       f"{results['R_liq_pct']:.2f}"),
+        ]
+        self._table.setColumnCount(2)
+        self._table.setRowCount(len(rows))
+        self._table.setHorizontalHeaderLabels(["Parameter", "Value"])
+        for i, (param, val) in enumerate(rows):
+            self._table.setItem(i, 0, QTableWidgetItem(param))
+            self._table.setItem(i, 1, QTableWidgetItem(val))
 
     def _populate_flash_table(self, results: dict):
         t = results["t"]

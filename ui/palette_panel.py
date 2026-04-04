@@ -260,6 +260,39 @@ class FlashSeparatorTile(EquipmentTile):
         painter.drawPolygon(poly)
 
 
+class AbsorptionColumnTile(EquipmentTile):
+    """Palette tile for dragging an Absorption Column onto the flowsheet."""
+
+    def _draw_reactor_icon(self, painter: QPainter, cx: int, cy: int, w: int, h: int):
+        from PyQt6.QtCore import QPointF as _QPointF, QRectF as _QRectF
+
+        bh = h * 4 // 5
+        # Column body
+        painter.setPen(QPen(QColor("#1abc9c"), 1.5))
+        painter.setBrush(QBrush(QColor("#d1f2eb")))
+        painter.drawRect(cx - w // 2, cy - bh // 2, w, bh)
+
+        # Cross-hatch fill (packed-bed symbol)
+        painter.setClipRect(_QRectF(cx - w // 2, cy - bh // 2, w, bh))
+        hatch_pen = QPen(QColor("#1abc9c"), 0.6)
+        painter.setPen(hatch_pen)
+        step = 6
+        for i in range(-bh, bh + w, step):
+            painter.drawLine(
+                cx - w // 2, cy - bh // 2 + i,
+                cx - w // 2 + w + bh, cy - bh // 2 + i - w - bh,
+            )
+        painter.setClipping(False)
+
+        # Liquid inlet stub (top left)
+        painter.setPen(QPen(QColor("#1abc9c"), 1.5))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawLine(cx - w // 2 - 8, cy - bh // 4, cx - w // 2, cy - bh // 4)
+
+        # Gas outlet stub (top right)
+        painter.drawLine(cx + w // 2, cy - bh // 4, cx + w // 2 + 8, cy - bh // 4)
+
+
 class PalettePanel(QWidget):
     """Equipment palette dock contents."""
 
@@ -317,6 +350,18 @@ class PalettePanel(QWidget):
 
         flash_tile = FlashSeparatorTile("Flash Sep.", "flash_separator")
         layout.addWidget(flash_tile, alignment=Qt.AlignmentFlag.AlignHCenter)
+
+        sep4 = QFrame()
+        sep4.setFrameShape(QFrame.Shape.HLine)
+        sep4.setStyleSheet("color: #bdc3c7;")
+        layout.addWidget(sep4)
+
+        cat4 = QLabel("Gas-Liquid")
+        cat4.setStyleSheet("color: #0e6655; font-size: 11px; font-weight: bold;")
+        layout.addWidget(cat4)
+
+        abs_tile = AbsorptionColumnTile("Absorption Col.", "absorption_column")
+        layout.addWidget(abs_tile, alignment=Qt.AlignmentFlag.AlignHCenter)
 
         tip = QLabel("Drag onto the\nflowsheet to add")
         tip.setStyleSheet("color: #95a5a6; font-size: 10px;")

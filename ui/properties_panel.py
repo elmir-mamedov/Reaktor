@@ -278,6 +278,124 @@ class PropertiesPanel(QWidget):
         self._flash_grp.setVisible(False)
         layout.addWidget(self._flash_grp)
 
+        # — Absorption Column Settings —
+        from models.absorption import PACKING_DATABASE
+        self._abs_grp = QGroupBox("Absorption Column")
+        abs_main = QVBoxLayout(self._abs_grp)
+        abs_main.setContentsMargins(6, 6, 6, 6)
+        abs_main.setSpacing(6)
+
+        abs_form = QFormLayout()
+        abs_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+
+        self._abs_yin_spin = self._dspin(0.001, 0.999, 0.13, 4)
+        abs_form.addRow("y_in (gas inlet):", self._abs_yin_spin)
+        self._abs_yin_spin.valueChanged.connect(self._update_absorption)
+
+        self._abs_yout_spin = self._dspin(1e-6, 0.5, 0.0005, 5)
+        abs_form.addRow("y_out (gas outlet):", self._abs_yout_spin)
+        self._abs_yout_spin.valueChanged.connect(self._update_absorption)
+
+        self._abs_uG_spin = self._dspin(0.01, 10.0, 1.1, 3)
+        abs_form.addRow("u_G (m/s):", self._abs_uG_spin)
+        self._abs_uG_spin.valueChanged.connect(self._update_absorption)
+
+        self._abs_T_spin = self._dspin(273.0, 400.0, 298.15, 2)
+        abs_form.addRow("T (K):", self._abs_T_spin)
+        self._abs_T_spin.valueChanged.connect(self._update_absorption)
+
+        self._abs_P_spin = self._dspin(10000.0, 20000000.0, 101325.0, 0)
+        self._abs_P_spin.setStepType(QDoubleSpinBox.StepType.AdaptiveDecimalStepType)
+        abs_form.addRow("P (Pa):", self._abs_P_spin)
+        self._abs_P_spin.valueChanged.connect(self._update_absorption)
+
+        self._abs_lf_spin = self._dspin(1.01, 10.0, 1.5, 2)
+        abs_form.addRow("L / L_min factor:", self._abs_lf_spin)
+        self._abs_lf_spin.valueChanged.connect(self._update_absorption)
+
+        self._abs_D_spin = self._dspin(0.05, 20.0, 1.4, 3)
+        abs_form.addRow("Diameter D (m):", self._abs_D_spin)
+        self._abs_D_spin.valueChanged.connect(self._update_absorption)
+
+        self._abs_packing_combo = QComboBox()
+        for pk_name in PACKING_DATABASE:
+            self._abs_packing_combo.addItem(pk_name)
+        abs_form.addRow("Packing:", self._abs_packing_combo)
+        self._abs_packing_combo.currentTextChanged.connect(self._update_absorption)
+
+        self._abs_npts_spin = QSpinBox()
+        self._abs_npts_spin.setRange(10, 500)
+        self._abs_npts_spin.setValue(100)
+        self._abs_npts_spin.setSingleStep(10)
+        abs_form.addRow("Grid points:", self._abs_npts_spin)
+        self._abs_npts_spin.valueChanged.connect(self._update_absorption)
+
+        abs_main.addLayout(abs_form)
+
+        # Collapsible "Advanced / Physical Properties" sub-group
+        self._abs_adv_btn = QPushButton("▶  Advanced / Physical Properties")
+        self._abs_adv_btn.setCheckable(True)
+        self._abs_adv_btn.setChecked(False)
+        self._abs_adv_btn.setStyleSheet(
+            "QPushButton { text-align: left; font-size: 10px; "
+            "color: #5d6d7e; border: none; padding: 2px 0; background: transparent; }"
+            "QPushButton:checked { color: #0e6655; }")
+        abs_main.addWidget(self._abs_adv_btn)
+
+        self._abs_adv_widget = QWidget()
+        self._abs_adv_widget.setVisible(False)
+        adv_form = QFormLayout(self._abs_adv_widget)
+        adv_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+
+        self._abs_rhoL_spin = self._dspin(100.0, 3000.0, 997.0, 2)
+        adv_form.addRow("ρ_L (kg/m³):", self._abs_rhoL_spin)
+        self._abs_rhoL_spin.valueChanged.connect(self._update_absorption)
+
+        self._abs_muL_spin = self._dspin(1e-6, 1.0, 8.9e-4, 6)
+        adv_form.addRow("μ_L (Pa·s):", self._abs_muL_spin)
+        self._abs_muL_spin.valueChanged.connect(self._update_absorption)
+
+        self._abs_sigL_spin = self._dspin(0.001, 0.1, 0.072, 4)
+        adv_form.addRow("σ_L (N/m):", self._abs_sigL_spin)
+        self._abs_sigL_spin.valueChanged.connect(self._update_absorption)
+
+        self._abs_DL_spin = self._dspin(1e-12, 1e-6, 1.92e-9, 12)
+        self._abs_DL_spin.setStepType(QDoubleSpinBox.StepType.AdaptiveDecimalStepType)
+        adv_form.addRow("D_L (m²/s):", self._abs_DL_spin)
+        self._abs_DL_spin.valueChanged.connect(self._update_absorption)
+
+        self._abs_DG_spin = self._dspin(1e-7, 1e-3, 1.6e-5, 9)
+        self._abs_DG_spin.setStepType(QDoubleSpinBox.StepType.AdaptiveDecimalStepType)
+        adv_form.addRow("D_G (m²/s):", self._abs_DG_spin)
+        self._abs_DG_spin.valueChanged.connect(self._update_absorption)
+
+        self._abs_rhoG_spin = self._dspin(0.01, 100.0, 1.185, 4)
+        adv_form.addRow("ρ_G (kg/m³):", self._abs_rhoG_spin)
+        self._abs_rhoG_spin.valueChanged.connect(self._update_absorption)
+
+        self._abs_muG_spin = self._dspin(1e-6, 1e-3, 1.84e-5, 8)
+        self._abs_muG_spin.setStepType(QDoubleSpinBox.StepType.AdaptiveDecimalStepType)
+        adv_form.addRow("μ_G (Pa·s):", self._abs_muG_spin)
+        self._abs_muG_spin.valueChanged.connect(self._update_absorption)
+
+        self._abs_Hpx_spin = self._dspin(1e4, 1e9, 3.4e7, 0)
+        self._abs_Hpx_spin.setStepType(QDoubleSpinBox.StepType.AdaptiveDecimalStepType)
+        adv_form.addRow("H_px (Pa):", self._abs_Hpx_spin)
+        self._abs_Hpx_spin.valueChanged.connect(self._update_absorption)
+
+        abs_main.addWidget(self._abs_adv_widget)
+        self._abs_adv_btn.toggled.connect(
+            lambda checked: (
+                self._abs_adv_widget.setVisible(checked),
+                self._abs_adv_btn.setText(
+                    ("▼  Advanced / Physical Properties"
+                     if checked else "▶  Advanced / Physical Properties"))
+            )
+        )
+
+        self._abs_grp.setVisible(False)
+        layout.addWidget(self._abs_grp)
+
         # Run button
         self._run_btn = QPushButton("▶  Run Simulation")
         self._run_btn.setObjectName("run_btn")
@@ -293,7 +411,8 @@ class PropertiesPanel(QWidget):
 
     def load_reactor(self, item, upstream_heater=None):
         """Populate the panel from any flowsheet item (reactor or heater)."""
-        from ui.flowsheet_canvas import HeaterCoolerItem, FlashSeparatorItem
+        from ui.flowsheet_canvas import (HeaterCoolerItem, FlashSeparatorItem,
+                                         AbsorptionColumnItem)
         self._loading = True
         self._item = item
         self._upstream_heater = upstream_heater
@@ -304,17 +423,42 @@ class PropertiesPanel(QWidget):
 
         is_heater = isinstance(item, HeaterCoolerItem)
         is_flash = isinstance(item, FlashSeparatorItem)
+        is_absorption = isinstance(item, AbsorptionColumnItem)
+        is_reactor = not is_heater and not is_flash and not is_absorption
 
         # Show/hide groups based on item type
-        self._rxn_grp.setVisible(not is_heater and not is_flash)
-        self._kin_grp.setVisible(not is_heater and not is_flash)
-        self._species_grp.setVisible(not is_heater and not is_flash)
-        self._sim_grp.setVisible(not is_heater and not is_flash)
+        self._rxn_grp.setVisible(is_reactor)
+        self._kin_grp.setVisible(is_reactor)
+        self._species_grp.setVisible(is_reactor)
+        self._sim_grp.setVisible(is_reactor)
         self._heater_grp.setVisible(is_heater)
         self._flash_grp.setVisible(is_flash)
+        self._abs_grp.setVisible(is_absorption)
         self._cstr_grp.setVisible(False)
 
-        if is_heater:
+        if is_absorption:
+            self._reactor_type_lbl.setText("Absorption Column")
+            cfg = item.config
+            self._abs_yin_spin.setValue(cfg.y_in)
+            self._abs_yout_spin.setValue(cfg.y_out)
+            self._abs_uG_spin.setValue(cfg.u_G)
+            self._abs_T_spin.setValue(cfg.T)
+            self._abs_P_spin.setValue(cfg.P)
+            self._abs_lf_spin.setValue(cfg.L_factor)
+            self._abs_D_spin.setValue(cfg.D_col)
+            idx = self._abs_packing_combo.findText(cfg.packing)
+            if idx >= 0:
+                self._abs_packing_combo.setCurrentIndex(idx)
+            self._abs_npts_spin.setValue(cfg.n_points)
+            self._abs_rhoL_spin.setValue(cfg.rho_L)
+            self._abs_muL_spin.setValue(cfg.mu_L)
+            self._abs_sigL_spin.setValue(cfg.sigma_L)
+            self._abs_DL_spin.setValue(cfg.D_L)
+            self._abs_DG_spin.setValue(cfg.D_G)
+            self._abs_rhoG_spin.setValue(cfg.rho_G)
+            self._abs_muG_spin.setValue(cfg.mu_G)
+            self._abs_Hpx_spin.setValue(cfg.H_px)
+        elif is_heater:
             self._reactor_type_lbl.setText("Heater / Cooler")
             cfg = item.config
             self._h_T0_spin.setValue(cfg.T0)
@@ -405,6 +549,32 @@ class PropertiesPanel(QWidget):
         if self._loading:
             return
         self._read_species_table()
+
+    def _update_absorption(self):
+        if self._item is None or self._loading:
+            return
+        from ui.flowsheet_canvas import AbsorptionColumnItem
+        if not isinstance(self._item, AbsorptionColumnItem):
+            return
+        cfg = self._item.config
+        cfg.y_in            = self._abs_yin_spin.value()
+        cfg.y_out           = self._abs_yout_spin.value()
+        cfg.u_G             = self._abs_uG_spin.value()
+        cfg.T               = self._abs_T_spin.value()
+        cfg.P               = self._abs_P_spin.value()
+        cfg.L_factor         = self._abs_lf_spin.value()
+        cfg.D_col           = self._abs_D_spin.value()
+        cfg.packing         = self._abs_packing_combo.currentText()
+        cfg.n_points        = self._abs_npts_spin.value()
+        cfg.rho_L           = self._abs_rhoL_spin.value()
+        cfg.mu_L            = self._abs_muL_spin.value()
+        cfg.sigma_L         = self._abs_sigL_spin.value()
+        cfg.D_L             = self._abs_DL_spin.value()
+        cfg.D_G             = self._abs_DG_spin.value()
+        cfg.rho_G           = self._abs_rhoG_spin.value()
+        cfg.mu_G            = self._abs_muG_spin.value()
+        cfg.H_px            = self._abs_Hpx_spin.value()
+        self._item.update()
 
     def _update_heater(self):
         if self._item is None or self._loading:

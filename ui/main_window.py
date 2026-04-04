@@ -6,7 +6,8 @@ from PyQt6.QtGui import QAction
 from ui.palette_panel import PalettePanel
 from ui.flowsheet_canvas import (FlowsheetScene, FlowsheetView,
                                   BatchReactorItem, CSTRReactorItem,
-                                  HeaterCoolerItem, FlashSeparatorItem)
+                                  HeaterCoolerItem, FlashSeparatorItem,
+                                  AbsorptionColumnItem)
 from ui.properties_panel import PropertiesPanel
 from ui.results_panel import ResultsPanel
 from models.batch_reactor import simulate
@@ -161,6 +162,8 @@ class MainWindow(QMainWindow):
                 self._results.display_coupled(data[0], data[1], item.name)
             elif kind == "flash":
                 self._results.display_flash(data[0], item.name)
+            elif kind == "absorption":
+                self._results.display_absorption(data[0], item.name)
 
     def _on_reactor_deselected(self):
         self._props.clear()
@@ -174,7 +177,8 @@ class MainWindow(QMainWindow):
         (they are re-run automatically as part of the coupled simulation)."""
         all_items = [i for i in self._scene.items()
                      if isinstance(i, (BatchReactorItem, CSTRReactorItem,
-                                       HeaterCoolerItem, FlashSeparatorItem))]
+                                       HeaterCoolerItem, FlashSeparatorItem,
+                                       AbsorptionColumnItem))]
         if not all_items:
             self._statusbar.showMessage("No blocks on the canvas to run.", 4000)
             return
@@ -186,7 +190,8 @@ class MainWindow(QMainWindow):
             [i for i in all_items if isinstance(i, HeaterCoolerItem) and i not in connected_heaters] +
             [i for i in all_items if isinstance(i, BatchReactorItem)] +
             [i for i in all_items if isinstance(i, CSTRReactorItem)] +
-            [i for i in all_items if isinstance(i, FlashSeparatorItem)]
+            [i for i in all_items if isinstance(i, FlashSeparatorItem)] +
+            [i for i in all_items if isinstance(i, AbsorptionColumnItem)]
         )
 
         for item in ordered:
@@ -196,6 +201,31 @@ class MainWindow(QMainWindow):
             f"All {len(ordered)} block(s) simulated.", 5000)
 
     def _run_reactor(self, item):
+        # ── Absorption Column path ────────────────────────────────────────
+        if isinstance(item, AbsorptionColumnItem):
+            from models.absorption import simulate_absorption
+            self._statusbar.showMessage(f"Running {item.name}…")
+            try:
+                results = simulate_absorption(item.config)
+                if not results["success"]:
+                    self._statusbar.showMessage(
+                        f"Solver warning for {item.name}: {results['message']}", 6000)
+                item._last_results = ("absorption", results)
+                self._results.display_absorption(results, item.name)
+                msg = (f"{item.name}  |  H = {results['H_col']:.2f} m"
+                       f"  |  HETP = {results['HETP_mean']:.3f} m"
+                       f"  |  NOG = {results['NOG']:.2f}"
+                       f"  |  ΔP = {results['delta_P']:.0f} Pa")
+                self._statusbar.showMessage(msg)
+                self._tb_info.setText(
+                    f"  {item.name}  •  H = {results['H_col']:.2f} m"
+                    f"  •  HETP = {results['HETP_mean']:.3f} m")
+            except Exception as exc:
+                QMessageBox.critical(self, "Simulation Error",
+                                     f"Simulation failed for {item.name}:\n\n{exc}")
+                self._statusbar.showMessage(f"Error: {exc}", 6000)
+            return
+
         # ── Flash Separator path ──────────────────────────────────────────
         if isinstance(item, FlashSeparatorItem):
             from models.flash import simulate_flash
