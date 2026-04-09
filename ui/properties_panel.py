@@ -447,10 +447,10 @@ class PropertiesPanel(QWidget):
         self._run_btn.setObjectName("run_btn")
         self._run_btn.setFixedHeight(36)
         self._run_btn.setStyleSheet(
-            "QPushButton { background-color: #27ae60; color: white; border: none;"
+            "QPushButton { background-color: #000000; color: white; border: none;"
             " border-radius: 4px; font-weight: bold; font-size: 12px; }"
-            "QPushButton:hover { background-color: #1e8449; }"
-            "QPushButton:pressed { background-color: #196f3d; }"
+            "QPushButton:hover { background-color: #1a1a1a; }"
+            "QPushButton:pressed { background-color: #333333; }"
         )
         self._run_btn.clicked.connect(self._on_run)
         layout.addWidget(self._run_btn)
