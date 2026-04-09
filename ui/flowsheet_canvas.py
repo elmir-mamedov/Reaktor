@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 from PyQt6.QtWidgets import (QGraphicsScene, QGraphicsView, QGraphicsItem,
                               QGraphicsLineItem, QMenu)
-from PyQt6.QtCore import Qt, QRectF, QPointF, QLineF, pyqtSignal
+from PyQt6.QtCore import Qt, QRectF, QPointF, QLineF, QEvent, pyqtSignal
 from PyQt6.QtGui import (QPainter, QPen, QBrush, QColor, QFont,
                           QTransform, QAction, QPainterPath)
 
@@ -949,17 +949,34 @@ class FlowsheetView(QGraphicsView):
     # ── zoom ──────────────────────────────────────────────────────────────
 
     _MIN_SCALE = 1.0 / 3.0   # can't zoom out more than 3× the initial scale
-    _MAX_SCALE = 10.0
+    _MAX_SCALE = 2.0
 
     def wheelEvent(self, event):
-        factor = 1.15 if event.angleDelta().y() > 0 else 1.0 / 1.15
-        current = self.transform().m11()
-        new_scale = current * factor
-        if new_scale < self._MIN_SCALE:
-            factor = self._MIN_SCALE / current
-        elif new_scale > self._MAX_SCALE:
-            factor = self._MAX_SCALE / current
-        self.scale(factor, factor)
+        # Two-finger scroll pans the canvas; pinch-to-zoom handles scaling.
+        delta = event.pixelDelta()
+        if delta.isNull():
+            ad = event.angleDelta()
+            delta = QPointF(ad.x() / 8, ad.y() / 8)
+        self.horizontalScrollBar().setValue(
+            self.horizontalScrollBar().value() - int(delta.x())
+        )
+        self.verticalScrollBar().setValue(
+            self.verticalScrollBar().value() - int(delta.y())
+        )
+
+    def event(self, event):
+        if event.type() == QEvent.Type.NativeGesture:
+            if event.gestureType() == Qt.NativeGestureType.ZoomNativeGesture:
+                factor = 1.0 + event.value()
+                current = self.transform().m11()
+                new_scale = current * factor
+                if new_scale < self._MIN_SCALE:
+                    factor = self._MIN_SCALE / current
+                elif new_scale > self._MAX_SCALE:
+                    factor = self._MAX_SCALE / current
+                self.scale(factor, factor)
+                return True
+        return super().event(event)
 
     # ── port detection ────────────────────────────────────────────────────
 

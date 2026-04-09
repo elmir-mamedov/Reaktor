@@ -12,10 +12,15 @@ class EquipmentTile(QWidget):
         self._label = label
         self._mime_key = mime_key
         self._hovered = False
+        self._dark_mode = False
         self._drag_start: QPoint | None = None
         self.setFixedSize(130, 100)
         self.setCursor(Qt.CursorShape.OpenHandCursor)
         self.setMouseTracking(True)
+
+    def set_dark_mode(self, dark: bool):
+        self._dark_mode = dark
+        self.update()
 
     # ── painting ──────────────────────────────────────────────────────────
 
@@ -23,8 +28,14 @@ class EquipmentTile(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        bg = QColor("#ebf5fb") if self._hovered else QColor("#fdfefe")
-        border = QColor("#2980b9") if self._hovered else QColor("#aab7b8")
+        if self._dark_mode:
+            bg = QColor("#1e2e3e") if self._hovered else QColor("#1a1a1a")
+            border = QColor("#2980b9") if self._hovered else QColor("#2a2a2a")
+            label_color = QColor("#a0c8e8")
+        else:
+            bg = QColor("#ebf5fb") if self._hovered else QColor("#fdfefe")
+            border = QColor("#2980b9") if self._hovered else QColor("#aab7b8")
+            label_color = QColor("#1a3a5c")
 
         painter.setBrush(QBrush(bg))
         painter.setPen(QPen(border, 1))
@@ -32,7 +43,7 @@ class EquipmentTile(QWidget):
 
         self._draw_reactor_icon(painter, self.width() // 2, 40, 28, 40)
 
-        painter.setPen(QPen(QColor("#1a3a5c")))
+        painter.setPen(QPen(label_color))
         painter.setFont(QFont("", 9, QFont.Weight.Bold))
         painter.drawText(0, self.height() - 18, self.width(), 18,
                          Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter,
@@ -307,65 +318,94 @@ class PalettePanel(QWidget):
         layout.setSpacing(8)
 
         # Section header
-        header = QLabel("EQUIPMENT")
-        header.setStyleSheet(
+        self._header = QLabel("EQUIPMENT")
+        self._header.setStyleSheet(
             "color: #7f8c8d; font-size: 10px; font-weight: bold; letter-spacing: 1px;")
-        layout.addWidget(header)
+        layout.addWidget(self._header)
 
-        sep = QFrame()
-        sep.setFrameShape(QFrame.Shape.HLine)
-        sep.setStyleSheet("color: #bdc3c7;")
-        layout.addWidget(sep)
+        self._sep = QFrame()
+        self._sep.setFrameShape(QFrame.Shape.HLine)
+        self._sep.setStyleSheet("color: #bdc3c7;")
+        layout.addWidget(self._sep)
 
-        cat = QLabel("Reactors")
-        cat.setStyleSheet("color: #1a5276; font-size: 11px; font-weight: bold;")
-        layout.addWidget(cat)
+        self._cat = QLabel("Reactors")
+        self._cat.setStyleSheet("color: #1a5276; font-size: 11px; font-weight: bold;")
+        layout.addWidget(self._cat)
 
-        tile = EquipmentTile("Batch Reactor", "batch_reactor")
-        layout.addWidget(tile, alignment=Qt.AlignmentFlag.AlignHCenter)
+        self._tile = EquipmentTile("Batch Reactor", "batch_reactor")
+        layout.addWidget(self._tile, alignment=Qt.AlignmentFlag.AlignHCenter)
 
-        cstr_tile = CSTREquipmentTile("CSTR", "cstr_reactor")
-        layout.addWidget(cstr_tile, alignment=Qt.AlignmentFlag.AlignHCenter)
+        self._cstr_tile = CSTREquipmentTile("CSTR", "cstr_reactor")
+        layout.addWidget(self._cstr_tile, alignment=Qt.AlignmentFlag.AlignHCenter)
 
-        sep2 = QFrame()
-        sep2.setFrameShape(QFrame.Shape.HLine)
-        sep2.setStyleSheet("color: #bdc3c7;")
-        layout.addWidget(sep2)
+        self._sep2 = QFrame()
+        self._sep2.setFrameShape(QFrame.Shape.HLine)
+        self._sep2.setStyleSheet("color: #bdc3c7;")
+        layout.addWidget(self._sep2)
 
-        cat2 = QLabel("Heat Transfer")
-        cat2.setStyleSheet("color: #784212; font-size: 11px; font-weight: bold;")
-        layout.addWidget(cat2)
+        self._cat2 = QLabel("Heat Transfer")
+        self._cat2.setStyleSheet("color: #784212; font-size: 11px; font-weight: bold;")
+        layout.addWidget(self._cat2)
 
-        heater_tile = HeaterCoolerTile("Heater/Cooler", "heater_cooler")
-        layout.addWidget(heater_tile, alignment=Qt.AlignmentFlag.AlignHCenter)
+        self._heater_tile = HeaterCoolerTile("Heater/Cooler", "heater_cooler")
+        layout.addWidget(self._heater_tile, alignment=Qt.AlignmentFlag.AlignHCenter)
 
-        sep3 = QFrame()
-        sep3.setFrameShape(QFrame.Shape.HLine)
-        sep3.setStyleSheet("color: #bdc3c7;")
-        layout.addWidget(sep3)
+        self._sep3 = QFrame()
+        self._sep3.setFrameShape(QFrame.Shape.HLine)
+        self._sep3.setStyleSheet("color: #bdc3c7;")
+        layout.addWidget(self._sep3)
 
-        cat3 = QLabel("Separation")
-        cat3.setStyleSheet("color: #1a5276; font-size: 11px; font-weight: bold;")
-        layout.addWidget(cat3)
+        self._cat3 = QLabel("Separation")
+        self._cat3.setStyleSheet("color: #1a5276; font-size: 11px; font-weight: bold;")
+        layout.addWidget(self._cat3)
 
-        flash_tile = FlashSeparatorTile("Flash Sep.", "flash_separator")
-        layout.addWidget(flash_tile, alignment=Qt.AlignmentFlag.AlignHCenter)
+        self._flash_tile = FlashSeparatorTile("Flash Sep.", "flash_separator")
+        layout.addWidget(self._flash_tile, alignment=Qt.AlignmentFlag.AlignHCenter)
 
-        sep4 = QFrame()
-        sep4.setFrameShape(QFrame.Shape.HLine)
-        sep4.setStyleSheet("color: #bdc3c7;")
-        layout.addWidget(sep4)
+        self._sep4 = QFrame()
+        self._sep4.setFrameShape(QFrame.Shape.HLine)
+        self._sep4.setStyleSheet("color: #bdc3c7;")
+        layout.addWidget(self._sep4)
 
-        cat4 = QLabel("Gas-Liquid")
-        cat4.setStyleSheet("color: #0e6655; font-size: 11px; font-weight: bold;")
-        layout.addWidget(cat4)
+        self._cat4 = QLabel("Gas-Liquid")
+        self._cat4.setStyleSheet("color: #0e6655; font-size: 11px; font-weight: bold;")
+        layout.addWidget(self._cat4)
 
-        abs_tile = AbsorptionColumnTile("Absorption Col.", "absorption_column")
-        layout.addWidget(abs_tile, alignment=Qt.AlignmentFlag.AlignHCenter)
+        self._abs_tile = AbsorptionColumnTile("Absorption Col.", "absorption_column")
+        layout.addWidget(self._abs_tile, alignment=Qt.AlignmentFlag.AlignHCenter)
 
-        tip = QLabel("Drag onto the\nflowsheet to add")
-        tip.setStyleSheet("color: #95a5a6; font-size: 10px;")
-        tip.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-        layout.addWidget(tip)
+        self._tip = QLabel("Drag onto the\nflowsheet to add")
+        self._tip.setStyleSheet("color: #95a5a6; font-size: 10px;")
+        self._tip.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        layout.addWidget(self._tip)
 
         layout.addStretch()
+
+    def set_dark_mode(self, dark: bool):
+        if dark:
+            self.setStyleSheet("background-color: #111111;")
+            self._header.setStyleSheet(
+                "color: #555555; font-size: 10px; font-weight: bold; letter-spacing: 1px;")
+            self._cat.setStyleSheet("color: #a0c8e8; font-size: 11px; font-weight: bold;")
+            self._cat2.setStyleSheet("color: #e0a060; font-size: 11px; font-weight: bold;")
+            self._cat3.setStyleSheet("color: #a0c8e8; font-size: 11px; font-weight: bold;")
+            self._cat4.setStyleSheet("color: #5dbea8; font-size: 11px; font-weight: bold;")
+            sep_style = "color: #2a2a2a;"
+            self._tip.setStyleSheet("color: #444444; font-size: 10px;")
+        else:
+            self.setStyleSheet("background-color: #f4f6f7;")
+            self._header.setStyleSheet(
+                "color: #7f8c8d; font-size: 10px; font-weight: bold; letter-spacing: 1px;")
+            self._cat.setStyleSheet("color: #1a5276; font-size: 11px; font-weight: bold;")
+            self._cat2.setStyleSheet("color: #784212; font-size: 11px; font-weight: bold;")
+            self._cat3.setStyleSheet("color: #1a5276; font-size: 11px; font-weight: bold;")
+            self._cat4.setStyleSheet("color: #0e6655; font-size: 11px; font-weight: bold;")
+            sep_style = "color: #bdc3c7;"
+            self._tip.setStyleSheet("color: #95a5a6; font-size: 10px;")
+
+        for sep in (self._sep, self._sep2, self._sep3, self._sep4):
+            sep.setStyleSheet(sep_style)
+
+        for tile in (self._tile, self._cstr_tile, self._heater_tile,
+                     self._flash_tile, self._abs_tile):
+            tile.set_dark_mode(dark)

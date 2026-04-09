@@ -27,7 +27,7 @@ class _Canvas(FigureCanvasQTAgg):
 
     def set_dark_mode(self, enabled: bool) -> None:
         self._dark = enabled
-        fig_bg = "#1e2328" if enabled else "white"
+        fig_bg = "#000000" if enabled else "white"
         self.fig.set_facecolor(fig_bg)
         for ax in self.fig.get_axes():
             self._apply_ax_style(ax)
