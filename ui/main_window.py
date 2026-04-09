@@ -1,5 +1,6 @@
 from PyQt6.QtWidgets import (QMainWindow, QDockWidget, QSplitter,
-                              QStatusBar, QLabel, QMessageBox, QToolBar)
+                              QStatusBar, QLabel, QMessageBox, QToolBar,
+                              QApplication)
 from PyQt6.QtCore import Qt, QSize
 from PyQt6.QtGui import QAction
 
@@ -27,6 +28,9 @@ class MainWindow(QMainWindow):
         self._build_docks()
         self._build_statusbar()
         self._connect()
+
+        self._dark_act.setChecked(True)
+        self._toggle_theme(True)
 
         self._statusbar.showMessage(
             "Drag a Batch Reactor or CSTR from the Equipment palette onto the flowsheet.", 6000)
@@ -92,6 +96,13 @@ class MainWindow(QMainWindow):
         fit_a2.triggered.connect(self._fit_view)
         view_m.addAction(fit_a2)
 
+        view_m.addSeparator()
+        self._dark_act = QAction("Dark Mode", self)
+        self._dark_act.setCheckable(True)
+        self._dark_act.setShortcut("Ctrl+Shift+D")
+        self._dark_act.triggered.connect(self._toggle_theme)
+        view_m.addAction(self._dark_act)
+
         help_m = mb.addMenu("Help")
         about_a = QAction("About Reaktor", self)
         about_a.triggered.connect(self._show_about)
@@ -133,7 +144,7 @@ class MainWindow(QMainWindow):
 
         # Enforce initial widths
         self.resizeDocks([palette_dock], [160], Qt.Orientation.Horizontal)
-        self.resizeDocks([props_dock], [290], Qt.Orientation.Horizontal)
+        self.resizeDocks([props_dock], [380], Qt.Orientation.Horizontal)
 
     def _build_statusbar(self):
         self._statusbar = QStatusBar()
@@ -405,12 +416,27 @@ class MainWindow(QMainWindow):
         self._tb_info.setText("  No reactor selected")
         self._statusbar.showMessage("Flowsheet cleared.", 3000)
 
+    def _toggle_theme(self, checked: bool):
+        from ui.styles import DARK_STYLESHEET, LIGHT_STYLESHEET
+        QApplication.instance().setStyleSheet(
+            DARK_STYLESHEET if checked else LIGHT_STYLESHEET)
+        self._scene.set_dark_mode(checked)
+        self._results.set_dark_mode(checked)
+        self._props.set_dark_mode(checked)
+        self._palette.set_dark_mode(checked)
+        label_style = "color: #888888;" if checked else "color: #636e72;"
+        self._tb_info.setStyleSheet(f"{label_style} font-size: 11px;")
+
     def _fit_view(self):
         br = self._scene.itemsBoundingRect()
-        if not br.isNull():
-            self._canvas.fitInView(
-                br.adjusted(-80, -80, 80, 80),
-                Qt.AspectRatioMode.KeepAspectRatio)
+        if br.isNull():
+            return
+        vp = self._canvas.viewport()
+        if vp.width() < 50 or vp.height() < 50:
+            return
+        self._canvas.fitInView(
+            br.adjusted(-80, -80, 80, 80),
+            Qt.AspectRatioMode.KeepAspectRatio)
 
     def _show_about(self):
         QMessageBox.about(

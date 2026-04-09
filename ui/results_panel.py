@@ -22,19 +22,56 @@ class _Canvas(FigureCanvasQTAgg):
         self.setParent(parent)
         self.fig = fig
         self._ax = None
+        self._dark = False
         self._show_placeholder()
+
+    def set_dark_mode(self, enabled: bool) -> None:
+        self._dark = enabled
+        fig_bg = "#000000" if enabled else "white"
+        self.fig.set_facecolor(fig_bg)
+        for ax in self.fig.get_axes():
+            self._apply_ax_style(ax)
+        self.draw_idle()
+
+    def _fig_bg(self) -> str:
+        return "#0f0f0f" if self._dark else "white"
+
+    def _ax_bg(self) -> str:
+        return "#111111" if self._dark else "#fafafa"
+
+    def _text_color(self) -> str:
+        return "#e8e8e8" if self._dark else "black"
+
+    def _apply_ax_style(self, ax) -> None:
+        tc = self._text_color()
+        ax.set_facecolor(self._ax_bg())
+        ax.tick_params(colors=tc, labelcolor=tc)
+        ax.xaxis.label.set_color(tc)
+        ax.yaxis.label.set_color(tc)
+        ax.title.set_color(tc)
+        for spine in ax.spines.values():
+            spine.set_edgecolor("#3d4450" if self._dark else "#cccccc")
+        legend = ax.get_legend()
+        if legend:
+            legend.get_frame().set_facecolor("#1a1a1a" if self._dark else "white")
+            legend.get_frame().set_edgecolor("#2a2a2a" if self._dark else "#cccccc")
+            for text in legend.get_texts():
+                text.set_color(tc)
 
     def _show_placeholder(self):
         self.fig.clear()
+        self.fig.set_facecolor(self._fig_bg())
         ax = self.fig.add_subplot(111)
         ax.text(0.5, 0.5, "Run a simulation to see results",
                 ha="center", va="center", transform=ax.transAxes,
                 color="#95a5a6", fontsize=11)
         ax.axis("off")
+        ax.set_facecolor(self._ax_bg())
         self.draw_idle()
 
     def plot_concentrations(self, results: dict):
         self.fig.clear()
+        self.fig.set_facecolor(self._fig_bg())
         ax = self.fig.add_subplot(111)
         t = results["t"]
         for i, (sp, conc) in enumerate(results["concentrations"].items()):
@@ -47,12 +84,13 @@ class _Canvas(FigureCanvasQTAgg):
         ax.set_xlim(0, t[-1])
         ax.set_ylim(bottom=0)
         ax.grid(True, alpha=0.3)
-        ax.set_facecolor("#fafafa")
+        self._apply_ax_style(ax)
         self.fig.tight_layout()
         self.draw_idle()
 
     def plot_conversion(self, results: dict):
         self.fig.clear()
+        self.fig.set_facecolor(self._fig_bg())
         ax = self.fig.add_subplot(111)
         t = results["t"]
         X = results["conversion"] * 100
@@ -64,12 +102,13 @@ class _Canvas(FigureCanvasQTAgg):
         ax.set_xlim(0, t[-1])
         ax.set_ylim(0, 105)
         ax.grid(True, alpha=0.3)
-        ax.set_facecolor("#fafafa")
+        self._apply_ax_style(ax)
         self.fig.tight_layout()
         self.draw_idle()
 
     def plot_temperature(self, results: dict):
         self.fig.clear()
+        self.fig.set_facecolor(self._fig_bg())
         ax = self.fig.add_subplot(111)
         t = results["t"]
         T = results["temperature"]
@@ -79,12 +118,13 @@ class _Canvas(FigureCanvasQTAgg):
         ax.set_title("Temperature vs. Time", fontsize=11, fontweight="bold")
         ax.set_xlim(0, t[-1])
         ax.grid(True, alpha=0.3)
-        ax.set_facecolor("#fafafa")
+        self._apply_ax_style(ax)
         self.fig.tight_layout()
         self.draw_idle()
 
     def plot_approach(self, results: dict):
         self.fig.clear()
+        self.fig.set_facecolor(self._fig_bg())
         ax = self.fig.add_subplot(111)
         t = results["t"]
         A = results["approach"]
@@ -96,13 +136,14 @@ class _Canvas(FigureCanvasQTAgg):
         ax.set_xlim(0, t[-1])
         ax.set_ylim(0, 105)
         ax.grid(True, alpha=0.3)
-        ax.set_facecolor("#fafafa")
+        self._apply_ax_style(ax)
         self.fig.tight_layout()
         self.draw_idle()
 
     def plot_flash_phase(self, results: dict, phase: str):
         """Plot mole fraction vs time for vapor (y_i) or liquid (x_i)."""
         self.fig.clear()
+        self.fig.set_facecolor(self._fig_bg())
         ax = self.fig.add_subplot(111)
         t = results["t"]
         data = results[phase]  # "vapor" or "liquid"
@@ -118,13 +159,14 @@ class _Canvas(FigureCanvasQTAgg):
         ax.set_xlim(0, t[-1])
         ax.set_ylim(0, 1.05)
         ax.grid(True, alpha=0.3)
-        ax.set_facecolor("#fafafa")
+        self._apply_ax_style(ax)
         self.fig.tight_layout()
         self.draw_idle()
 
     def plot_flash_psi(self, results: dict):
         """Plot vapor fraction ψ(t)."""
         self.fig.clear()
+        self.fig.set_facecolor(self._fig_bg())
         ax = self.fig.add_subplot(111)
         t = results["t"]
         psi = results["psi"]
@@ -136,13 +178,14 @@ class _Canvas(FigureCanvasQTAgg):
         ax.set_xlim(0, t[-1])
         ax.set_ylim(0, 1.05)
         ax.grid(True, alpha=0.3)
-        ax.set_facecolor("#fafafa")
+        self._apply_ax_style(ax)
         self.fig.tight_layout()
         self.draw_idle()
 
     def plot_absorption_profiles(self, results: dict):
         """Tab 0: y(z), y*(z) on left axis; x(z) on right axis."""
         self.fig.clear()
+        self.fig.set_facecolor(self._fig_bg())
         ax = self.fig.add_subplot(111)
         z = results["z"]
         ax.plot(z, results["y"],      color="#2980b9", linewidth=2, label="y (gas)")
@@ -156,20 +199,27 @@ class _Canvas(FigureCanvasQTAgg):
         ax2.set_ylabel("Liquid mole fraction x (−)", fontsize=10, color="#e74c3c")
         ax2.tick_params(axis="y", labelcolor="#e74c3c")
         ax.set_xlim(0, z[-1])
+        tc = self._text_color()
         ax.set_title("Composition Profiles along Column Height",
-                     fontsize=11, fontweight="bold")
+                     fontsize=11, fontweight="bold", color=tc)
         ax.grid(True, alpha=0.3)
-        ax.set_facecolor("#fafafa")
+        self._apply_ax_style(ax)
+        self._apply_ax_style(ax2)
+        # Restore per-axis y-label colors (overridden by _apply_ax_style)
+        ax.yaxis.label.set_color("#2980b9")
+        ax2.yaxis.label.set_color("#e74c3c")
         # Combined legend
         lines1, labels1 = ax.get_legend_handles_labels()
         lines2, labels2 = ax2.get_legend_handles_labels()
         ax.legend(lines1 + lines2, labels1 + labels2, fontsize=9, framealpha=0.9)
+        self._apply_ax_style(ax)  # re-apply to update legend after it's created
         self.fig.tight_layout()
         self.draw_idle()
 
     def plot_hetp_profile(self, results: dict):
         """Tab 1: HOG(z) and HETP(z) with mean reference lines."""
         self.fig.clear()
+        self.fig.set_facecolor(self._fig_bg())
         ax = self.fig.add_subplot(111)
         z = results["z"]
         ax.plot(z, results["HOG"],  color="#1abc9c", linewidth=2, label="HOG")
@@ -185,13 +235,14 @@ class _Canvas(FigureCanvasQTAgg):
         ax.set_xlim(0, z[-1])
         ax.set_ylim(bottom=0)
         ax.grid(True, alpha=0.3)
-        ax.set_facecolor("#fafafa")
+        self._apply_ax_style(ax)
         self.fig.tight_layout()
         self.draw_idle()
 
     def plot_transfer_coefficients(self, results: dict):
         """Tab 2: k_G·a, k_L·a, K_OG·a along z."""
         self.fig.clear()
+        self.fig.set_facecolor(self._fig_bg())
         ax = self.fig.add_subplot(111)
         z = results["z"]
         ax.plot(z, results["kG_a"],  color="#2980b9", linewidth=2, label="$k_G a$")
@@ -205,12 +256,13 @@ class _Canvas(FigureCanvasQTAgg):
         ax.set_xlim(0, z[-1])
         ax.set_ylim(bottom=0)
         ax.grid(True, alpha=0.3)
-        ax.set_facecolor("#fafafa")
+        self._apply_ax_style(ax)
         self.fig.tight_layout()
         self.draw_idle()
 
     def plot_mass_balance(self, results: dict):
         self.fig.clear()
+        self.fig.set_facecolor(self._fig_bg())
         ax = self.fig.add_subplot(111)
         t = results["t"]
         streams = results["streams"]
@@ -233,7 +285,7 @@ class _Canvas(FigureCanvasQTAgg):
         ax.set_xlim(0, t[-1])
         ax.set_ylim(bottom=0)
         ax.grid(True, alpha=0.3)
-        ax.set_facecolor("#fafafa")
+        self._apply_ax_style(ax)
         self.fig.tight_layout()
         self.draw_idle()
 
@@ -245,12 +297,12 @@ class ResultsPanel(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
 
         # Header bar
-        header = QLabel("  Simulation Results")
-        header.setFixedHeight(28)
-        header.setStyleSheet(
+        self._header = QLabel("  Simulation Results")
+        self._header.setFixedHeight(28)
+        self._header.setStyleSheet(
             "background-color: #1a5276; color: white;"
             "font-size: 11px; font-weight: bold;")
-        layout.addWidget(header)
+        layout.addWidget(self._header)
 
         self._tabs = QTabWidget()
         layout.addWidget(self._tabs)
@@ -273,6 +325,19 @@ class ResultsPanel(QWidget):
         self._tabs.addTab(self._mb_canvas, "Mass Balance")
         self._tabs.setTabVisible(2, False)
         self._tabs.setTabVisible(4, False)
+
+    def set_dark_mode(self, enabled: bool) -> None:
+        for canvas in (self._conc_canvas, self._conv_canvas,
+                       self._extra_canvas, self._mb_canvas):
+            canvas.set_dark_mode(enabled)
+        if enabled:
+            self._header.setStyleSheet(
+                "background-color: #111111; color: #e8e8e8;"
+                "font-size: 11px; font-weight: bold;")
+        else:
+            self._header.setStyleSheet(
+                "background-color: #1a5276; color: white;"
+                "font-size: 11px; font-weight: bold;")
 
     def display(self, results: dict, reactor_name: str = ""):
         self._tabs.setTabVisible(2, False)
