@@ -29,6 +29,9 @@ class MainWindow(QMainWindow):
         self._build_statusbar()
         self._connect()
 
+        self._dark_act.setChecked(True)
+        self._toggle_theme(True)
+
         self._statusbar.showMessage(
             "Drag a Batch Reactor or CSTR from the Equipment palette onto the flowsheet.", 6000)
 
@@ -141,7 +144,7 @@ class MainWindow(QMainWindow):
 
         # Enforce initial widths
         self.resizeDocks([palette_dock], [160], Qt.Orientation.Horizontal)
-        self.resizeDocks([props_dock], [290], Qt.Orientation.Horizontal)
+        self.resizeDocks([props_dock], [380], Qt.Orientation.Horizontal)
 
     def _build_statusbar(self):
         self._statusbar = QStatusBar()
@@ -420,15 +423,20 @@ class MainWindow(QMainWindow):
         self._scene.set_dark_mode(checked)
         self._results.set_dark_mode(checked)
         self._props.set_dark_mode(checked)
+        self._palette.set_dark_mode(checked)
         label_style = "color: #888888;" if checked else "color: #636e72;"
         self._tb_info.setStyleSheet(f"{label_style} font-size: 11px;")
 
     def _fit_view(self):
         br = self._scene.itemsBoundingRect()
-        if not br.isNull():
-            self._canvas.fitInView(
-                br.adjusted(-80, -80, 80, 80),
-                Qt.AspectRatioMode.KeepAspectRatio)
+        if br.isNull():
+            return
+        vp = self._canvas.viewport()
+        if vp.width() < 50 or vp.height() < 50:
+            return
+        self._canvas.fitInView(
+            br.adjusted(-80, -80, 80, 80),
+            Qt.AspectRatioMode.KeepAspectRatio)
 
     def _show_about(self):
         QMessageBox.about(

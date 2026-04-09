@@ -1063,9 +1063,13 @@ class FlowsheetView(QGraphicsView):
     def _fit_all(self):
         sc = self.scene()
         br = sc.itemsBoundingRect()
-        if not br.isNull():
-            self.fitInView(br.adjusted(-80, -80, 80, 80),
-                           Qt.AspectRatioMode.KeepAspectRatio)
+        if br.isNull():
+            return
+        vp = self.viewport()
+        if vp.width() < 50 or vp.height() < 50:
+            return
+        self.fitInView(br.adjusted(-80, -80, 80, 80),
+                       Qt.AspectRatioMode.KeepAspectRatio)
 
     # ── drag-and-drop from palette ────────────────────────────────────────
 
