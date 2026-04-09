@@ -948,8 +948,17 @@ class FlowsheetView(QGraphicsView):
 
     # ── zoom ──────────────────────────────────────────────────────────────
 
+    _MIN_SCALE = 1.0 / 3.0   # can't zoom out more than 3× the initial scale
+    _MAX_SCALE = 10.0
+
     def wheelEvent(self, event):
         factor = 1.15 if event.angleDelta().y() > 0 else 1.0 / 1.15
+        current = self.transform().m11()
+        new_scale = current * factor
+        if new_scale < self._MIN_SCALE:
+            factor = self._MIN_SCALE / current
+        elif new_scale > self._MAX_SCALE:
+            factor = self._MAX_SCALE / current
         self.scale(factor, factor)
 
     # ── port detection ────────────────────────────────────────────────────
