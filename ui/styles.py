@@ -155,8 +155,9 @@ QCheckBox::indicator {
     background-color: white;
 }
 QCheckBox::indicator:checked {
-    background-color: #2980b9;
-    border-color: #2980b9;
+    background-color: #2c3e50;
+    border-color: #2c3e50;
+    image: url(ui/check.svg);
 }
 QCheckBox::indicator:hover {
     border-color: #2980b9;
@@ -421,8 +422,9 @@ QCheckBox::indicator {
     background-color: #1a1a1a;
 }
 QCheckBox::indicator:checked {
-    background-color: #2980b9;
-    border-color: #2980b9;
+    background-color: #1a1a1a;
+    border-color: #555555;
+    image: url(ui/check.svg);
 }
 QCheckBox::indicator:hover {
     border-color: #2980b9;
