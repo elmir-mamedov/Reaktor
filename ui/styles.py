@@ -147,6 +147,20 @@ QCheckBox {
     color: #2c3e50;
     spacing: 6px;
 }
+QCheckBox::indicator {
+    width: 14px;
+    height: 14px;
+    border: 2px solid #7f8c8d;
+    border-radius: 3px;
+    background-color: white;
+}
+QCheckBox::indicator:checked {
+    background-color: #2980b9;
+    border-color: #2980b9;
+}
+QCheckBox::indicator:hover {
+    border-color: #2980b9;
+}
 
 /* ── Scroll area ── */
 QScrollArea {
@@ -399,6 +413,20 @@ QCheckBox {
     color: #e8e8e8;
     spacing: 6px;
 }
+QCheckBox::indicator {
+    width: 14px;
+    height: 14px;
+    border: 2px solid #555555;
+    border-radius: 3px;
+    background-color: #1a1a1a;
+}
+QCheckBox::indicator:checked {
+    background-color: #2980b9;
+    border-color: #2980b9;
+}
+QCheckBox::indicator:hover {
+    border-color: #2980b9;
+}
 
 /* ── Scroll area ── */
 QScrollArea {
@@ -500,4 +528,4 @@ QSplitter::handle {
 }
 """
 
-APP_STYLESHEET = LIGHT_STYLESHEET
+APP_STYLESHEET = DARK_STYLESHEET
