@@ -20,8 +20,8 @@ class PropertiesPanel(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setMinimumWidth(260)
-        self.setMaximumWidth(320)
+        self.setMinimumWidth(300)
+        self.setMaximumWidth(420)
         self._item = None               # current flowsheet item
         self._upstream_heater = None    # HeaterCoolerItem connected upstream (CSTR only)
         self._loading = False           # suppress callbacks while populating
@@ -443,9 +443,15 @@ class PropertiesPanel(QWidget):
         layout.addWidget(self._abs_grp)
 
         # Run button
-        self._run_btn = QPushButton("▶  Run Simulation")
+        self._run_btn = QPushButton("▶  Run Selected Block")
         self._run_btn.setObjectName("run_btn")
         self._run_btn.setFixedHeight(36)
+        self._run_btn.setStyleSheet(
+            "QPushButton { background-color: #27ae60; color: white; border: none;"
+            " border-radius: 4px; font-weight: bold; font-size: 12px; }"
+            "QPushButton:hover { background-color: #1e8449; }"
+            "QPushButton:pressed { background-color: #196f3d; }"
+        )
         self._run_btn.clicked.connect(self._on_run)
         layout.addWidget(self._run_btn)
 
