@@ -44,10 +44,10 @@ class PropertiesPanel(QWidget):
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         outer.addWidget(scroll)
 
-        content = QWidget()
-        content.setStyleSheet("background-color: white;")
-        scroll.setWidget(content)
-        self._layout = QVBoxLayout(content)
+        self._content = QWidget()
+        self._content.setStyleSheet("background-color: white;")
+        scroll.setWidget(self._content)
+        self._layout = QVBoxLayout(self._content)
         self._layout.setContentsMargins(10, 10, 10, 10)
         self._layout.setSpacing(10)
 
@@ -65,6 +65,52 @@ class PropertiesPanel(QWidget):
         self._form_widget.setVisible(False)
         self._layout.insertWidget(0, self._form_widget)
         self._build_form()
+
+    # ── theme ─────────────────────────────────────────────────────────────
+
+    def set_dark_mode(self, enabled: bool) -> None:
+        if enabled:
+            self._content.setStyleSheet("background-color: #0f0f0f;")
+            self._title.setStyleSheet(
+                "background-color: #111111; color: #e8e8e8;"
+                "font-size: 12px; font-weight: bold;")
+            self._placeholder.setStyleSheet(
+                "color: #666666; font-size: 12px; margin: 30px 0;")
+            self._reactor_type_lbl.setStyleSheet(
+                "color: #888888; font-size: 10px; font-style: italic;")
+            self._reaction_preview.setStyleSheet(
+                "font-size: 11px; font-weight: bold; color: #85c1e9;"
+                "background: #141414; border-radius: 4px; padding: 4px;")
+            self._species_table.setStyleSheet(
+                "QTableWidget::item { color: #e8e8e8; }")
+            self._tau_display.setStyleSheet("color: #888888; font-size: 10px;")
+            self._flash_species_table.setStyleSheet(
+                "QTableWidget::item { color: #e8e8e8; }")
+            self._abs_adv_btn.setStyleSheet(
+                "QPushButton { text-align: left; font-size: 10px; "
+                "color: #888888; border: none; padding: 2px 0; background: transparent; }"
+                "QPushButton:checked { color: #1abc9c; }")
+        else:
+            self._content.setStyleSheet("background-color: white;")
+            self._title.setStyleSheet(
+                "background-color: #2c5f8a; color: white;"
+                "font-size: 12px; font-weight: bold;")
+            self._placeholder.setStyleSheet(
+                "color: #95a5a6; font-size: 12px; margin: 30px 0;")
+            self._reactor_type_lbl.setStyleSheet(
+                "color: #5d6d7e; font-size: 10px; font-style: italic;")
+            self._reaction_preview.setStyleSheet(
+                "font-size: 11px; font-weight: bold; color: #1a3a5c;"
+                "background: #eaf4fb; border-radius: 4px; padding: 4px;")
+            self._species_table.setStyleSheet(
+                "QTableWidget::item { color: black; }")
+            self._tau_display.setStyleSheet("color: #5d6d7e; font-size: 10px;")
+            self._flash_species_table.setStyleSheet(
+                "QTableWidget::item { color: black; }")
+            self._abs_adv_btn.setStyleSheet(
+                "QPushButton { text-align: left; font-size: 10px; "
+                "color: #5d6d7e; border: none; padding: 2px 0; background: transparent; }"
+                "QPushButton:checked { color: #0e6655; }")
 
     # ── form construction ─────────────────────────────────────────────────
 

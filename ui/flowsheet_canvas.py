@@ -38,6 +38,14 @@ _PORT_RADIUS = 12   # px — how close cursor must be to snap to a port
 _ACW = 56     # column body width
 _ACH = 100    # column body height
 
+# ── Theme ─────────────────────────────────────────────────────────────────────
+_DARK_MODE: bool = False
+
+
+def set_dark_mode(enabled: bool) -> None:
+    global _DARK_MODE
+    _DARK_MODE = enabled
+
 
 class BatchReactorItem(QGraphicsItem):
     """PFD symbol for a batch reactor, rendered with a custom painter."""
@@ -95,18 +103,14 @@ class BatchReactorItem(QGraphicsItem):
         selected = self.isSelected()
         hovered = self._hovered
 
-        if selected:
-            body_fill = QColor("#85c1e9")
-            border = QColor("#154360")
-            bw = 2.5
-        elif hovered:
-            body_fill = QColor("#aed6f1")
-            border = QColor("#1a5276")
-            bw = 2.0
+        if _DARK_MODE:
+            if selected:   body_fill, border, bw = QColor("#1a5276"), QColor("#5dade2"), 2.5
+            elif hovered:  body_fill, border, bw = QColor("#154060"), QColor("#3498db"), 2.0
+            else:          body_fill, border, bw = QColor("#0d2a40"), QColor("#2980b9"), 1.5
         else:
-            body_fill = QColor("#d6eaf8")
-            border = QColor("#2980b9")
-            bw = 1.5
+            if selected:   body_fill, border, bw = QColor("#85c1e9"), QColor("#154360"), 2.5
+            elif hovered:  body_fill, border, bw = QColor("#aed6f1"), QColor("#1a5276"), 2.0
+            else:          body_fill, border, bw = QColor("#d6eaf8"), QColor("#2980b9"), 1.5
 
         pen = QPen(border, bw)
         brush = QBrush(body_fill)
@@ -130,18 +134,19 @@ class BatchReactorItem(QGraphicsItem):
             painter.drawLine(QPointF(-blen, blade_y), QPointF(blen, blade_y))
 
         if selected:
-            sel_pen = QPen(QColor("#3498db"), 1.2, Qt.PenStyle.DashLine)
+            sel_pen = QPen(QColor("#5dade2") if _DARK_MODE else QColor("#3498db"),
+                           1.2, Qt.PenStyle.DashLine)
             painter.setPen(sel_pen)
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.drawRect(self.boundingRect().adjusted(3, 3, -3, -3))
 
-        painter.setPen(QPen(QColor("#1a3a5c")))
+        painter.setPen(QPen(QColor("#85c1e9") if _DARK_MODE else QColor("#1a3a5c")))
         painter.setFont(QFont("", 9, QFont.Weight.Bold))
         painter.drawText(QRectF(-w / 2, h / 2 + 6, w, 18),
                          Qt.AlignmentFlag.AlignCenter, self.name)
 
         painter.setFont(QFont("", 7))
-        painter.setPen(QPen(QColor("#5d6d7e")))
+        painter.setPen(QPen(QColor("#95a5a6") if _DARK_MODE else QColor("#5d6d7e")))
         rstr = self.reaction.reaction_label()
         if len(rstr) > 12:
             rstr = rstr[:11] + "…"
@@ -242,18 +247,14 @@ class CSTRReactorItem(QGraphicsItem):
         selected = self.isSelected()
         hovered = self._hovered
 
-        if selected:
-            body_fill = QColor("#a9dfbf")
-            border = QColor("#145a32")
-            bw = 2.5
-        elif hovered:
-            body_fill = QColor("#abebc6")
-            border = QColor("#1e8449")
-            bw = 2.0
+        if _DARK_MODE:
+            if selected:   body_fill, border, bw = QColor("#186a3b"), QColor("#58d68d"), 2.5
+            elif hovered:  body_fill, border, bw = QColor("#145a32"), QColor("#2ecc71"), 2.0
+            else:          body_fill, border, bw = QColor("#0d3320"), QColor("#27ae60"), 1.5
         else:
-            body_fill = QColor("#d5f5e3")
-            border = QColor("#27ae60")
-            bw = 1.5
+            if selected:   body_fill, border, bw = QColor("#a9dfbf"), QColor("#145a32"), 2.5
+            elif hovered:  body_fill, border, bw = QColor("#abebc6"), QColor("#1e8449"), 2.0
+            else:          body_fill, border, bw = QColor("#d5f5e3"), QColor("#27ae60"), 1.5
 
         pen = QPen(border, bw)
         brush = QBrush(body_fill)
@@ -287,18 +288,19 @@ class CSTRReactorItem(QGraphicsItem):
             painter.drawLine(QPointF(-blen, blade_y), QPointF(blen, blade_y))
 
         if selected:
-            sel_pen = QPen(QColor("#2ecc71"), 1.2, Qt.PenStyle.DashLine)
+            sel_pen = QPen(QColor("#58d68d") if _DARK_MODE else QColor("#2ecc71"),
+                           1.2, Qt.PenStyle.DashLine)
             painter.setPen(sel_pen)
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.drawRect(self.boundingRect().adjusted(3, 3, -3, -3))
 
-        painter.setPen(QPen(QColor("#145a32")))
+        painter.setPen(QPen(QColor("#a9dfbf") if _DARK_MODE else QColor("#145a32")))
         painter.setFont(QFont("", 9, QFont.Weight.Bold))
         painter.drawText(QRectF(-w / 2, h / 2 + 6, w, 18),
                          Qt.AlignmentFlag.AlignCenter, self.name)
 
         painter.setFont(QFont("", 7))
-        painter.setPen(QPen(QColor("#5d6d7e")))
+        painter.setPen(QPen(QColor("#95a5a6") if _DARK_MODE else QColor("#5d6d7e")))
         rstr = self.reaction.reaction_label()
         if len(rstr) > 12:
             rstr = rstr[:11] + "…"
@@ -307,7 +309,7 @@ class CSTRReactorItem(QGraphicsItem):
 
         # Port indicators (shown when hovered or selected)
         if hovered or selected:
-            painter.setBrush(QBrush(QColor("#ffffff")))
+            painter.setBrush(QBrush(QColor("#0f0f0f") if _DARK_MODE else QColor("#ffffff")))
             painter.setPen(QPen(border, 1.5))
             painter.drawEllipse(QPointF(-w / 2 - 22, -h / 4), 5, 5)
             painter.drawEllipse(QPointF(w / 2 + 22, h / 4), 5, 5)
@@ -383,18 +385,14 @@ class HeaterCoolerItem(QGraphicsItem):
         selected = self.isSelected()
         hovered = self._hovered
 
-        if selected:
-            body_fill = QColor("#f0b27a")
-            border = QColor("#a04000")
-            bw = 2.5
-        elif hovered:
-            body_fill = QColor("#fad7a0")
-            border = QColor("#d35400")
-            bw = 2.0
+        if _DARK_MODE:
+            if selected:   body_fill, border, bw = QColor("#5a3100"), QColor("#f39c12"), 2.5
+            elif hovered:  body_fill, border, bw = QColor("#4a2800"), QColor("#e67e22"), 2.0
+            else:          body_fill, border, bw = QColor("#2e1800"), QColor("#d35400"), 1.5
         else:
-            body_fill = QColor("#fdebd0")
-            border = QColor("#e67e22")
-            bw = 1.5
+            if selected:   body_fill, border, bw = QColor("#f0b27a"), QColor("#a04000"), 2.5
+            elif hovered:  body_fill, border, bw = QColor("#fad7a0"), QColor("#d35400"), 2.0
+            else:          body_fill, border, bw = QColor("#fdebd0"), QColor("#e67e22"), 1.5
 
         pen = QPen(border, bw)
         w, h = _HW, _HH
@@ -420,18 +418,19 @@ class HeaterCoolerItem(QGraphicsItem):
             _draw_wave_line(painter, x0, wave_y, inner_w, h / 9, 3)
 
         if selected:
-            sel_pen = QPen(QColor("#e67e22"), 1.2, Qt.PenStyle.DashLine)
+            sel_pen = QPen(QColor("#f39c12") if _DARK_MODE else QColor("#e67e22"),
+                           1.2, Qt.PenStyle.DashLine)
             painter.setPen(sel_pen)
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.drawRect(self.boundingRect().adjusted(3, 3, -3, -3))
 
-        painter.setPen(QPen(QColor("#784212")))
+        painter.setPen(QPen(QColor("#f0b27a") if _DARK_MODE else QColor("#784212")))
         painter.setFont(QFont("", 9, QFont.Weight.Bold))
         painter.drawText(QRectF(-w / 2, h / 2 + 4, w, 18),
                          Qt.AlignmentFlag.AlignCenter, self.name)
 
         painter.setFont(QFont("", 7))
-        painter.setPen(QPen(QColor("#784212")))
+        painter.setPen(QPen(QColor("#cd8b4a") if _DARK_MODE else QColor("#784212")))
         hint = f"\u2192 {self.config.T_target:.1f} K"
         painter.drawText(QRectF(-w / 2, -h / 2 + 3, w, 14),
                          Qt.AlignmentFlag.AlignCenter, hint)
@@ -439,7 +438,7 @@ class HeaterCoolerItem(QGraphicsItem):
         # Output port indicator (shown when hovered or selected)
         if hovered or selected:
             port_local = QPointF(w / 2 + 22, 0)
-            painter.setBrush(QBrush(QColor("#ffffff")))
+            painter.setBrush(QBrush(QColor("#0f0f0f") if _DARK_MODE else QColor("#ffffff")))
             painter.setPen(QPen(border, 1.5))
             painter.drawEllipse(port_local, 5, 5)
 
@@ -506,18 +505,14 @@ class FlashSeparatorItem(QGraphicsItem):
         selected = self.isSelected()
         hovered = self._hovered
 
-        if selected:
-            body_fill = QColor("#aed6f1")
-            border = QColor("#1a5276")
-            bw = 2.5
-        elif hovered:
-            body_fill = QColor("#d6eaf8")
-            border = QColor("#2980b9")
-            bw = 2.0
+        if _DARK_MODE:
+            if selected:   body_fill, border, bw = QColor("#1a3d52"), QColor("#5dade2"), 2.5
+            elif hovered:  body_fill, border, bw = QColor("#122d42"), QColor("#3498db"), 2.0
+            else:          body_fill, border, bw = QColor("#0a1e2e"), QColor("#2980b9"), 1.5
         else:
-            body_fill = QColor("#ebf5fb")
-            border = QColor("#5dade2")
-            bw = 1.5
+            if selected:   body_fill, border, bw = QColor("#aed6f1"), QColor("#1a5276"), 2.5
+            elif hovered:  body_fill, border, bw = QColor("#d6eaf8"), QColor("#2980b9"), 2.0
+            else:          body_fill, border, bw = QColor("#ebf5fb"), QColor("#5dade2"), 1.5
 
         w, h = _FW, _FH
 
@@ -538,7 +533,7 @@ class FlashSeparatorItem(QGraphicsItem):
 
         # Phase labels
         painter.setFont(QFont("", 7, QFont.Weight.Bold))
-        painter.setPen(QPen(QColor("#1a5276")))
+        painter.setPen(QPen(QColor("#85c1e9") if _DARK_MODE else QColor("#1a5276")))
         painter.drawText(QRectF(-w / 2, -h / 2 + 4, w, 14),
                          Qt.AlignmentFlag.AlignCenter, "V")
         painter.drawText(QRectF(-w / 2 + 10, h / 2 - 18, w - 10, 14),
@@ -559,23 +554,24 @@ class FlashSeparatorItem(QGraphicsItem):
         _draw_arrowhead(painter, w / 2 + 22, h / 4, 6, border)
 
         if selected:
-            painter.setPen(QPen(QColor("#2980b9"), 1.2, Qt.PenStyle.DashLine))
+            painter.setPen(QPen(QColor("#5dade2") if _DARK_MODE else QColor("#2980b9"),
+                                1.2, Qt.PenStyle.DashLine))
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.drawRect(self.boundingRect().adjusted(3, 3, -3, -3))
 
-        painter.setPen(QPen(QColor("#1a5276")))
+        painter.setPen(QPen(QColor("#85c1e9") if _DARK_MODE else QColor("#1a5276")))
         painter.setFont(QFont("", 9, QFont.Weight.Bold))
         painter.drawText(QRectF(-w / 2, h / 2 + 6, w, 18),
                          Qt.AlignmentFlag.AlignCenter, self.name)
 
         painter.setFont(QFont("", 7))
-        painter.setPen(QPen(QColor("#5d6d7e")))
+        painter.setPen(QPen(QColor("#95a5a6") if _DARK_MODE else QColor("#5d6d7e")))
         painter.drawText(QRectF(-w / 2, -h / 2 - 18, w, 14),
                          Qt.AlignmentFlag.AlignCenter, f"T = {self.config.T:.0f} K")
 
         # Port indicators (shown when hovered or selected)
         if hovered or selected:
-            painter.setBrush(QBrush(QColor("#ffffff")))
+            painter.setBrush(QBrush(QColor("#0f0f0f") if _DARK_MODE else QColor("#ffffff")))
             painter.setPen(QPen(border, 1.5))
             painter.drawEllipse(QPointF(-w / 2 - 22, 0), 5, 5)
             painter.drawEllipse(QPointF(w / 2 + 22, -h / 4), 5, 5)
@@ -633,18 +629,14 @@ class AbsorptionColumnItem(QGraphicsItem):
         selected = self.isSelected()
         hovered  = self._hovered
 
-        if selected:
-            body_fill = QColor("#a2d9ce")
-            border    = QColor("#0e6655")
-            bw = 2.5
-        elif hovered:
-            body_fill = QColor("#c0ece5")
-            border    = QColor("#148f77")
-            bw = 2.0
+        if _DARK_MODE:
+            if selected:   body_fill, border, bw = QColor("#133d2e"), QColor("#1abc9c"), 2.5
+            elif hovered:  body_fill, border, bw = QColor("#0d3828"), QColor("#17b89a"), 2.0
+            else:          body_fill, border, bw = QColor("#072920"), QColor("#148f77"), 1.5
         else:
-            body_fill = QColor("#d1f2eb")
-            border    = QColor("#1abc9c")
-            bw = 1.5
+            if selected:   body_fill, border, bw = QColor("#a2d9ce"), QColor("#0e6655"), 2.5
+            elif hovered:  body_fill, border, bw = QColor("#c0ece5"), QColor("#148f77"), 2.0
+            else:          body_fill, border, bw = QColor("#d1f2eb"), QColor("#1abc9c"), 1.5
 
         w, h = _ACW, _ACH
         pen   = QPen(border, bw)
@@ -685,14 +677,14 @@ class AbsorptionColumnItem(QGraphicsItem):
         _draw_arrowhead(painter, -w / 2 - 22, h / 4, 6, border)
 
         # Name label below
-        painter.setPen(QPen(QColor("#0e6655")))
+        painter.setPen(QPen(QColor("#a2d9ce") if _DARK_MODE else QColor("#0e6655")))
         painter.setFont(QFont("", 9, QFont.Weight.Bold))
         painter.drawText(QRectF(-w / 2, h / 2 + 6, w, 18),
                          Qt.AlignmentFlag.AlignCenter, self.name)
 
         # Packing hint above
         painter.setFont(QFont("", 7))
-        painter.setPen(QPen(QColor("#5d6d7e")))
+        painter.setPen(QPen(QColor("#95a5a6") if _DARK_MODE else QColor("#5d6d7e")))
         packing_short = self.config.packing.split()[0] + " " + self.config.packing.split()[1] \
             if len(self.config.packing.split()) >= 2 else self.config.packing
         painter.drawText(QRectF(-w / 2, -h / 2 - 18, w, 14),
@@ -745,7 +737,7 @@ class StreamItem(QGraphicsItem):
         except Exception:
             return
 
-        color = QColor("#7f8c8d")
+        color = QColor("#e3e3e3") if _DARK_MODE else QColor("#7f8c8d")
         painter.setPen(QPen(color, 2.0))
         painter.setBrush(Qt.BrushStyle.NoBrush)
         painter.drawPath(path)
@@ -851,6 +843,14 @@ class FlowsheetScene(QGraphicsScene):
                 return s.source
         return None
 
+    # ── theme ─────────────────────────────────────────────────────────────
+
+    def set_dark_mode(self, enabled: bool) -> None:
+        set_dark_mode(enabled)
+        for item in self.items():
+            item.update()
+        self.update()
+
     # ── notifications ─────────────────────────────────────────────────────
 
     def _notify_selected(self, item):
@@ -932,11 +932,11 @@ class FlowsheetView(QGraphicsView):
     # ── background grid ───────────────────────────────────────────────────
 
     def drawBackground(self, painter: QPainter, rect: QRectF):
-        painter.fillRect(rect, QColor("#fafafa"))
+        painter.fillRect(rect, QColor("#0f0f0f") if _DARK_MODE else QColor("#fafafa"))
         grid = 25
         left = int(rect.left()) - (int(rect.left()) % grid)
         top = int(rect.top()) - (int(rect.top()) % grid)
-        dot_pen = QPen(QColor("#d5d8dc"), 1)
+        dot_pen = QPen(QColor("#1e1e1e") if _DARK_MODE else QColor("#d5d8dc"), 1)
         painter.setPen(dot_pen)
         x = left
         while x <= int(rect.right()) + grid:
@@ -989,7 +989,8 @@ class FlowsheetView(QGraphicsView):
                 self._conn_source_port = port
                 self._temp_line = self.scene().addLine(
                     QLineF(port, port),
-                    QPen(QColor("#7f8c8d"), 1.5, Qt.PenStyle.DashLine))
+                    QPen(QColor("#e3e3e3") if _DARK_MODE else QColor("#7f8c8d"),
+                         1.5, Qt.PenStyle.DashLine))
                 self.setCursor(Qt.CursorShape.CrossCursor)
                 return
 
