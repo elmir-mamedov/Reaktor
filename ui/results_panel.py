@@ -266,6 +266,12 @@ class _Canvas(FigureCanvasQTAgg):
         ax = self.fig.add_subplot(111)
         t = results["t"]
         streams = results["streams"]
+        if not streams:
+            ax.text(0.5, 0.5, "No stream data available",
+                    ha="center", va="center", transform=ax.transAxes, fontsize=11)
+            self._apply_ax_style(ax)
+            self.draw_idle()
+            return
         species_list = list(streams[0]["flows"].keys())
         for i, sp in enumerate(species_list):
             color = _COLORS[i % len(_COLORS)]
